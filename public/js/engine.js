@@ -24,6 +24,7 @@ export const KINDS = {
   knight: { hp: 2, move: 1, cost: 4 },
   priest: { hp: 1, move: 1, cost: 5 },
   witch: { hp: 1, move: 2, flies: true, cost: 5 },
+  finder: { hp: 3, move: 2, cost: 8 },
   gas: { hp: 1, object: true },
 };
 
@@ -371,6 +372,7 @@ function attackFrom(s, e, x, y, p) {
     case 'fork':
       return ax + ay === 1 ? { type: 'strike', d: dirTo(x, y, p.x, p.y) } : null;
     case 'knight':
+    case 'finder':
       return ax + ay === 1 ? { type: 'cleave', d: dirTo(x, y, p.x, p.y) } : null;
     case 'witch':
       return ax === 1 && ay === 1 ? { type: 'strike', d: dirTo(x, y, p.x, p.y) } : null;
@@ -480,12 +482,21 @@ export function outcome(s) {
 
 function rout(s, ev) {
   const left = enemies(s);
-  if (!rule(s, 'rout') || left.length !== 1 || !(s.party > 1)) return;
-  const e = left[0];
-  e.hp = 0;
-  ev.push({ t: 'flee', id: e.id, x: e.x, y: e.y });
-  s.stats.routed = (s.stats.routed || 0) + 1;
-  s.u = s.u.filter((u) => u !== e);
+  if (!rule(s, 'rout') || !left.length) return;
+  let fleeing;
+  if (s.bossFight) {
+    if (left.some((e) => e.k === 'finder')) return;
+    fleeing = left;
+  } else {
+    if (left.length !== 1 || !(s.party > 1)) return;
+    fleeing = left;
+  }
+  for (const e of fleeing) {
+    e.hp = 0;
+    ev.push({ t: 'flee', id: e.id, x: e.x, y: e.y });
+    s.stats.routed = (s.stats.routed || 0) + 1;
+  }
+  s.u = s.u.filter((u) => !fleeing.includes(u));
 }
 
 export function step(s, a) {

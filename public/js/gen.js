@@ -78,17 +78,39 @@ export function pickEnemies(rng, depth, mult = 1.6) {
   return out;
 }
 
-export function makeFloor(rng, depth, { w = 7, h = 8, hp = 3, mhp = 3, kinds = null, mult = 1.6, extraGas = 0 } = {}) {
+export const THEMES = {
+  meadow: { name: 'Wet meadow', blobs: [2, 3], blob: [3, 6], rocks: [2, 4], gas: 0 },
+  flooded: { name: 'Flooded fen', blobs: [4, 5], blob: [4, 7], rocks: [1, 2], gas: 0 },
+  stones: { name: 'Standing stones', blobs: [1, 2], blob: [2, 4], rocks: [7, 10], gas: 0 },
+  gas: { name: 'Gas field', blobs: [2, 3], blob: [3, 5], rocks: [2, 3], gas: 4 },
+  causeway: { name: 'The causeway', blobs: [1, 1], blob: [2, 3], rocks: [1, 3], gas: 1, band: true },
+};
+
+export function pickTheme(rng, depth, final) {
+  if (depth === 1 || final) return 'meadow';
+  const r = rng();
+  return r < 0.4 ? 'meadow' : r < 0.58 ? 'flooded' : r < 0.74 ? 'stones' : r < 0.88 ? 'gas' : 'causeway';
+}
+
+const span = (rng, [a, b]) => a + randInt(rng, b - a + 1);
+
+export function makeFloor(rng, depth, { w = 7, h = 8, hp = 3, mhp = 3, kinds = null, mult = 1.6, extraGas = 0, theme = 'meadow', boss = false } = {}) {
+  const T = THEMES[theme] || THEMES.meadow;
   for (let attempt = 0; attempt < 500; attempt++) {
     const s = emptyState(w, h);
-    const blobs = 2 + randInt(rng, 2);
-    for (let b = 0; b < blobs; b++) carve(s, rng, BOG, 3 + randInt(rng, 4));
-    const rocks = 2 + randInt(rng, 3);
+    if (T.band) {
+      const y = Math.floor(h / 2) - 1 + randInt(rng, 2);
+      const gaps = new Set([randInt(rng, w), randInt(rng, w)]);
+      for (let x = 0; x < w; x++) if (!gaps.has(x)) s.t[y * w + x] = BOG;
+    }
+    const blobs = span(rng, T.blobs);
+    for (let b = 0; b < blobs; b++) carve(s, rng, BOG, span(rng, T.blob));
+    const rocks = span(rng, T.rocks);
     for (let r = 0; r < rocks; r++) carve(s, rng, ROCK, 1 + (rng() < 0.3 ? 1 : 0));
     if (!groundConnected(s)) continue;
     const ground = [];
     for (let i = 0; i < s.t.length; i++) if (s.t[i] === GROUND) ground.push([i % w, Math.floor(i / w)]);
-    const bottom = ground.filter(([, y]) => y >= h - 2 && Math.abs(y) >= 0);
+    const bottom = ground.filter(([, y]) => y >= h - 2);
     if (!bottom.length) continue;
     const [px, py] = bottom[randInt(rng, bottom.length)];
     addUnit(s, 'wisp', px, py, { hp, mhp, d: 0 });
@@ -97,12 +119,14 @@ export function makeFloor(rng, depth, { w = 7, h = 8, hp = 3, mhp = 3, kinds = n
       rng,
     );
     const list = kinds || pickEnemies(rng, depth, mult);
+    if (boss) list.unshift('finder');
     if (spots.length < list.length + 2) continue;
+    if (boss) spots.sort((a, b) => Math.abs(a[0] - px) + Math.abs(a[1] - py) - (Math.abs(b[0] - px) + Math.abs(b[1] - py)));
     for (const k of list) {
       const [x, y] = spots.pop();
       addUnit(s, k, x, y, { d: 4 });
     }
-    const gasCount = (depth >= 2 ? randInt(rng, 3) : 0) + extraGas;
+    const gasCount = (depth >= 2 ? randInt(rng, 3) : 0) + extraGas + T.gas;
     const free = shuffle(
       s.t
         .map((t, i) => [i % w, Math.floor(i / w), t])
@@ -114,7 +138,9 @@ export function makeFloor(rng, depth, { w = 7, h = 8, hp = 3, mhp = 3, kinds = n
       addUnit(s, 'gas', x, y);
     }
     s.depth = depth;
+    s.theme = theme;
     s.party = list.length;
+    if (boss) s.bossFight = true;
     plan(s);
     return s;
   }

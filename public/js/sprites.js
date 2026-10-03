@@ -31,6 +31,10 @@ const PAL = {
   n: '#9ad488',
   l: '#fff2b0',
   s: '#e7e0c8',
+  z: '#1f1b28',
+  Z: '#4a4258',
+  q: '#3a3446',
+  Q: '#27222f',
 };
 
 const ART = {
@@ -161,6 +165,25 @@ const ART = {
     '................',
   ],
 };
+
+ART.finder = [
+  '....zzzz........',
+  '....zZZz........',
+  '....zZZz........',
+  '...zzozzz.......',
+  '..zzzzzzzz......',
+  '....ffkf......m.',
+  '....ffff.....m..',
+  '...sssss....m...',
+  '..qqqrqqq..m....',
+  '.qqqqqrqqfM.....',
+  '.qfqqqqrqMM.....',
+  '..qqqqqqr.......',
+  '..QqqqqqQ.......',
+  '..QqqqqqQ.......',
+  '...QQ.QQ........',
+  '...WW.WW........',
+];
 
 const cache = new Map();
 

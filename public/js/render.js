@@ -10,6 +10,7 @@ const LIGHT = {
   wisp: { r: 2.6, col: [140, 230, 255] },
   gas: { r: 1.0, col: [150, 255, 120] },
   priest: { r: 2.0, col: [255, 214, 120] },
+  finder: { r: 2.4, col: [255, 120, 90] },
   default: { r: 1.5, col: [255, 170, 90] },
 };
 
@@ -42,6 +43,7 @@ export class BoardView {
     this.dead = true;
     cancelAnimationFrame(this.raf);
     clearTimeout(this.idleT);
+    clearTimeout(this.fallT);
     document.removeEventListener('visibilitychange', this.onVis);
     for (const tw of this.tweens) tw.resolve();
     this.tweens = [];
@@ -148,7 +150,14 @@ export class BoardView {
   }
 
   kick() {
-    if (!this.dead && !this.raf && document.visibilityState !== 'hidden') this.raf = requestAnimationFrame(this.frame);
+    if (this.dead || this.raf || document.visibilityState === 'hidden') return;
+    this.raf = requestAnimationFrame(this.frame);
+    clearTimeout(this.fallT);
+    this.fallT = setTimeout(() => {
+      if (!this.raf || this.dead) return;
+      cancelAnimationFrame(this.raf);
+      this.frame(performance.now());
+    }, 100);
   }
 
   tween(dur, fn) {
@@ -198,6 +207,7 @@ export class BoardView {
 
   frame(now) {
     this.raf = 0;
+    clearTimeout(this.fallT);
     this.now = now;
     for (const tw of [...this.tweens]) {
       const t = Math.min(1, (now - tw.start) / tw.dur);
@@ -859,6 +869,13 @@ export class BoardView {
         this.boomAnim(e.at);
         if (navigator.vibrate && opts.haptics) navigator.vibrate(30);
         await this.wait(170);
+      } else if (e.t === 'veil') {
+        const v = U(e.id);
+        this.sfx('veil');
+        if (v) {
+          this.burst(v.x + 0.5, v.y + 0.5, 16, '#dfe8ff', 1.4, 700);
+          this.popup(v.x, v.y, 'veiled', '#dfe8ff');
+        }
       } else if (e.t === 'hurt') {
         const v = U(e.id);
         this.shake = 1.2;
@@ -1194,6 +1211,16 @@ export class BoardView {
       v.alpha = 1 - t * 0.4;
     }).then(() => {
       v.alpha = 0;
+    });
+  }
+
+  snuff(id) {
+    const v = this.units.get(id);
+    if (!v) return Promise.resolve();
+    this.burst(v.x + 0.5, v.y + 0.45, 30, '#bff4ff', 1.2, 1200, 0.05);
+    return this.tween(900, (t) => {
+      v.alpha = 1 - t;
+      v.dy = -t * 0.4;
     });
   }
 

@@ -1,5 +1,5 @@
 import { mulberry32, hashString, shuffle } from './rng.js';
-import { makeFloor } from './gen.js';
+import { makeFloor, pickTheme } from './gen.js';
 import { step, wisp, enemies, clone } from './engine.js';
 
 export const HOURS = 9;
@@ -69,7 +69,9 @@ export function floorRng(run, salt = '') {
 export function startFloor(run) {
   const rng = floorRng(run);
   const b = run.boons;
-  const s = makeFloor(rng, run.depth, { hp: run.hp, mhp: run.mhp, mult: moonMult(run.moon), extraGas: (b.kindling || 0) * 2 });
+  const final = run.depth === HOURS;
+  const theme = pickTheme(rng, run.depth, final);
+  const s = makeFloor(rng, run.depth, { hp: run.hp, mhp: run.mhp, mult: moonMult(run.moon), extraGas: (b.kindling || 0) * 2, theme, boss: final });
   s.rules = { ...moonRules(run.moon), ...(run.rules || {}) };
   if (b.drift) s.rules.step = 8;
   if (b.reach) s.rules.reach = true;

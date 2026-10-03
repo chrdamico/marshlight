@@ -3,6 +3,7 @@ import { sfx, buzz } from './sound.js';
 import { BoardView } from './render.js';
 import { actions, sameAction, preview, wisp, enemies, unitAt, clone, step, isEnemy } from './engine.js';
 import { newRun, playTurn, chooseBoon, BOONS, HOURS, HOUR_NAMES, MOONS } from './run.js';
+import { THEMES } from './gen.js';
 import { TRIALS, CHAPTERS, loadTrial } from './trials.js';
 import { sprite } from './sprites.js';
 import { initPWA, canPrompt, promptInstall, isStandalone, isIOS } from './pwa.js';
@@ -20,10 +21,11 @@ export const INFO = {
   knight: ['Knight', 'Two hearts. Swings at the cell in front of him and the two cells beside it. In bog, his armour sinks him at once.'],
   priest: ['Priest', 'Sends holy light along a whole line. It goes through everyone. Prays after each beam.'],
   witch: ['Witch', 'Flies, so bog cannot sink her. Strikes a diagonal cell. Moves two cells.'],
+  finder: ['The Witchfinder', 'Three hearts. Moves two cells and swings at three. When he falls, the rest flee. He sinks like any man.'],
   gas: ['Marsh gas', 'Bursts when something hits it and hurts all 8 cells around it. You can swap with it.'],
 };
 
-const KIND_ORDER = ['fork', 'bow', 'hound', 'flask', 'knight', 'priest', 'witch', 'gas'];
+const KIND_ORDER = ['fork', 'bow', 'hound', 'flask', 'knight', 'priest', 'witch', 'finder', 'gas'];
 const CHAPTER_KIND = [null, 'bow', 'hound', 'flask', 'knight', 'priest', 'witch', null];
 
 const ICONS = {
@@ -31,7 +33,7 @@ const ICONS = {
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   heart: '<svg viewBox="0 0 32 32"><path d="M16 27C8 21 4 16.5 4 11.5 4 8 6.7 5.5 10 5.5c2.4 0 4.6 1.4 6 3.5 1.4-2.1 3.6-3.5 6-3.5 3.3 0 6 2.5 6 6 0 5-4 9.5-12 15.5z" fill="#ff8f7f"/></svg>',
   dew: '<svg viewBox="0 0 32 32"><path d="M16 4C12 11 8 15 8 20a8 8 0 0016 0c0-5-4-9-8-16z" fill="#8fe7ff"/><circle cx="13" cy="20" r="2.4" fill="#fff" opacity=".8"/></svg>',
-  drift: '<svg viewBox="0 0 32 32" fill="none" stroke="#a6f2ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 23L23 9M15 9h8v8M23 23L9 9M9 17V9h8"/></svg>',
+  drift: '<svg viewBox="0 0 32 32" fill="none" stroke="#a6f2ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="16" r="2.5" fill="#a6f2ff"/><path d="M11 11L6 6M21 11l5-5M11 21l-5 5M21 21l5 5M6 11V6h5M26 11V6h-5M6 21v5h5M26 21v5h-5"/></svg>',
   reach: '<svg viewBox="0 0 32 32" fill="none" stroke="#a6f2ff" stroke-width="2.6" stroke-linecap="round"><path d="M4 16h24M22 10l6 6-6 6"/><circle cx="12" cy="16" r="3" fill="#a6f2ff"/><circle cx="20" cy="16" r="3" fill="none"/></svg>',
   breath: '<svg viewBox="0 0 32 32" fill="none" stroke="#a6f2ff" stroke-width="2.4"><circle cx="11" cy="20" r="5"/><circle cx="21" cy="12" r="4"/><circle cx="22" cy="23" r="2.5"/></svg>',
   veil: '<svg viewBox="0 0 32 32" fill="none" stroke="#cfe0ff" stroke-width="2.4" stroke-linecap="round"><path d="M5 11c4-3 8 3 12 0s7-3 10 0M5 17c4-3 8 3 12 0s7-3 10 0M5 23c4-3 8 3 12 0s7-3 10 0"/></svg>',
@@ -395,7 +397,7 @@ function Play(opts) {
     if (p.cd > 0)
       return setInfo('wisp', threatened ? 'Out of breath, and in danger' : 'Catching your breath', `You swapped last turn, so you can only <b>drift</b> or <b>wait</b>.${threatened ? ' Your cell is red: drift to a safe cell.' : ''}`);
     if (threatened) return setInfo('wisp', 'You are in danger', 'Red cells will be hit after your move. Drift away, or swap so a hunter takes your place.');
-    setInfo('wisp', 'Your move', 'Drift to a cell next to you, or swap with something in a straight line. Tap a hunter to learn about him.');
+    setInfo('wisp', 'Your move', 'Drift to a cell next to you, or swap with something in a straight line. Tap any hunter to see what it does.');
   }
 
   function hud_() {
@@ -408,7 +410,7 @@ function Play(opts) {
       scoreEl.textContent = '';
     } else {
       hourEl.textContent = HOUR_NAMES[run.depth - 1];
-      subEl.textContent = `${run.daily ? "Tonight's hunt · " : ''}Hour ${run.depth} of ${HOURS} · ${enemies(s).length} hunter${enemies(s).length === 1 ? '' : 's'}`;
+      subEl.textContent = `${run.daily ? "Tonight's hunt · " : ''}Hour ${run.depth} of ${HOURS} · ${THEMES[s.theme]?.name || 'Marsh'} · ${enemies(s).length} left`;
       heartsEl.replaceChildren(heartsRow(p.hp, p.mhp || run.mhp));
       scoreEl.textContent = `${fmt(run.score)} lights`;
     }
@@ -580,6 +582,8 @@ function Play(opts) {
           buzz([15, 40, 15]);
         }
         if (!isTrial && res.pts) {
+          const p = wisp(final);
+          view.popup(p.x, p.y - (killsNow >= 2 ? 0.05 : 0.4), `+${res.pts}`, '#ffd08a');
           scoreEl.textContent = `${fmt(run.score)} lights`;
           scoreEl.classList.remove('bump');
           void scoreEl.offsetWidth;
@@ -603,7 +607,7 @@ function Play(opts) {
     if (run.over === 'lost') {
       finishRun(run, opts.slot);
       sfx('lost');
-      setTimeout(() => endSheet(), 700);
+      view.snuff(wisp(run.state).id).then(() => setTimeout(() => endSheet(), 300));
       refresh();
       return;
     }
@@ -628,7 +632,7 @@ function Play(opts) {
     if (!alive) return;
     sheet(
       (box, close) => {
-        const heal = run.moon >= 3 ? '' : ' You also heal one heart.';
+        const heal = run.moon >= 3 || run.hp >= run.mhp ? '' : ' You also heal one heart.';
         box.append(el('h2', {}, `${HOUR_NAMES[run.depth]} approaches`), el('p', { class: 'lead' }, `Choose a gift of the marsh.${heal}`));
         const cards = el('div', { class: 'cards' });
         for (const id of run.offers || []) {
@@ -662,7 +666,7 @@ function Play(opts) {
     fit();
     sel = null;
     refresh();
-    banner(HOUR_NAMES[run.depth - 1], `Hour ${run.depth} of ${HOURS}`);
+    banner(HOUR_NAMES[run.depth - 1], run.depth === HOURS ? 'The Witchfinder comes' : THEMES[run.state.theme]?.name || `Hour ${run.depth} of ${HOURS}`);
     introduceKinds();
   }
 
@@ -678,7 +682,7 @@ function Play(opts) {
         (box, close) => {
           const [n, d] = INFO[k];
           box.append(
-            el('h3', {}, k === 'gas' ? 'Something in the marsh' : 'A new hunter'),
+            el('h3', {}, k === 'gas' ? 'Something in the marsh' : k === 'finder' ? 'The last hour' : 'A new hunter'),
             el('div', { class: 'beast' }, unitIcon(k, 48), el('div', {}, el('div', { class: 'nm' }, n), el('div', { class: 'ds' }, d))),
             el('div', { class: 'btns' }, el('button', { class: 'btn primary', onclick: close }, 'Got it')),
           );
@@ -1008,6 +1012,7 @@ function Play(opts) {
   window.addEventListener('keydown', onKey);
 
   view.setState(S(), isTrial ? 11 : run.depth * 7919 + (run.seed.length || 1));
+  fit();
   requestAnimationFrame(fit);
   refresh();
   if (!isTrial) {
