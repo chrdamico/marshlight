@@ -50,7 +50,8 @@ export class BoardView {
     this.tweens = [];
   }
 
-  setState(s, seed = 0) {
+  setState(s0, seed = 0) {
+    const s = JSON.parse(JSON.stringify(s0));
     this.state = s;
     if (this.seed !== seed || !this.terrain || this.terrainFor !== s.t.join('')) {
       this.terrain = terrainCanvas(s, seed);
@@ -74,6 +75,7 @@ export class BoardView {
       hp: u.hp,
       mhp: u.mhp || KINDS[u.k].hp,
       cd: u.cd,
+      rest: !!u.rest,
       it: u.it,
       flip: prev ? prev.flip : u.x > (this.state ? this.state.w / 2 : 3),
       alpha: u.hp > 0 || u.k === 'wisp' ? 1 : 0.55,
@@ -100,7 +102,7 @@ export class BoardView {
         this.units.set(u.id, this.toView(u));
         continue;
       }
-      Object.assign(v, { x: u.x, y: u.y, hp: u.hp, cd: u.cd, it: u.it, mhp: u.mhp || v.mhp, alpha: 1, dy: 0, ox: 0, oy: 0, sink: 0 });
+      Object.assign(v, { x: u.x, y: u.y, hp: u.hp, cd: u.cd, rest: !!u.rest, it: u.it, mhp: u.mhp || v.mhp, alpha: 1, dy: 0, ox: 0, oy: 0, sink: 0 });
       if (u.it) v.flip = this.faceLeft(u, v.flip);
     }
     for (const id of [...this.units.keys()]) if (!seen.has(id)) this.units.delete(id);
@@ -659,7 +661,7 @@ export class BoardView {
         g.stroke();
       }
     }
-    if (v.cd > 0 && v.alpha > 0.5 && !v.it) this.restIcon(g, cx + C * 0.3, cy - C * 0.36, k, now);
+    if (v.rest && v.alpha > 0.5 && !v.it) this.restIcon(g, cx + C * 0.3, cy - C * 0.36, k, now);
   }
 
   restIcon(g, x, y, k, now) {
@@ -809,7 +811,9 @@ export class BoardView {
         const [mx, my] = e.at;
         this.burst(mx + 0.5, my + 0.6, 14, '#5fa3b0', 1.4, 600);
         await this.wait(160);
-        this.sync({ ...this.state, t: final.t });
+        this.state = { ...this.state, t: final.t.slice() };
+        this.terrain = terrainCanvas(this.state, this.seed);
+        this.terrainFor = this.state.t.join('');
       } else if (e.t === 'move') {
         const v = U(e.id);
         const [fx, fy] = e.path[0];

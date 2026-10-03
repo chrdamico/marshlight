@@ -168,9 +168,10 @@ function Home() {
   const main = loadRun('main');
   const dkey = today();
   const dslot = db.slots.daily?.run;
+  if (dslot && !dslot.over && dslot.daily !== dkey) finishRun(dslot, 'daily', true);
   const dRunning = dslot && !dslot.over && dslot.daily === dkey ? dslot : null;
   const dRes = db.daily[dkey];
-  const moonMax = Math.min(5, 1 + (db.best.dawns > 0 ? db.best.moon : 0));
+  const moonMax = Math.min(5, db.best.dawns > 0 ? db.best.moon || 1 : 1);
   let moon = Math.min(moonMax, db.settings.moon || 1);
 
   const scr = el('section', { class: 'screen home' });
@@ -297,6 +298,14 @@ function Home() {
 /* ------------------------------------------------------------------ */
 
 function finishRun(run, slot, abandoned = false) {
+  if (abandoned && !run.over) run.over = 'abandoned';
+  if (!run.recorded) record(run);
+  saveRun(slot, run);
+  persist(true);
+}
+
+function record(run) {
+  run.recorded = true;
   const b = db.best;
   b.runs++;
   b.kills += run.kills;
@@ -311,15 +320,12 @@ function finishRun(run, slot, abandoned = false) {
   touchBest();
   if (run.daily) {
     const d = (db.daily[run.daily] = db.daily[run.daily] || {});
-    if (!d.first) d.first = { score: run.score, hour, won: run.over === 'won', at: Date.now() };
+    if (!d.first) d.first = { score: run.score, hour, won: run.over === 'won', at: Date.now(), marks: hourMarks(run), kills: run.kills, drowned: run.drowned };
     d.bestScore = Math.max(d.bestScore || 0, run.score);
     d.bestHour = Math.max(d.bestHour || 0, hour);
     d.won = d.won || run.over === 'won';
     d.at = Date.now();
   }
-  if (abandoned) run.over = run.over || 'abandoned';
-  saveRun(slot, run);
-  persist(true);
 }
 
 /* ------------------------------------------------------------------ */
@@ -497,12 +503,12 @@ function Play(opts) {
     return !!(run.offers || run.over);
   }
 
-  function tapAction(a) {
+  function tapAction(a, previewOnly = false) {
     if (locked()) return;
     const legal = actions(S()).find((b) => b.type === a.type && b.x === a.x && b.y === a.y && (a.id == null || b.id === a.id));
     if (!legal) return;
     const cell = a.x != null ? [a.x, a.y] : [wisp(S()).x, wisp(S()).y];
-    if (!db.settings.confirm || (sel && sameAction(sel.a, legal))) {
+    if (!previewOnly && (!db.settings.confirm || (sel && sameAction(sel.a, legal)))) {
       commit(legal);
       return;
     }
@@ -540,7 +546,7 @@ function Play(opts) {
     if (u) {
       const [n, d] = INFO[u.k];
       let extra = '';
-      if (u.cd > 0 && !u.it) extra = ' <b>Resting this turn.</b>';
+      if (u.rest && !u.it) extra = ' <b>Resting this turn.</b>';
       if (isEnemy(u) && u.hp > 1) extra += ` <b>${u.hp} hearts left.</b>`;
       if (p.cd === 0 && !sw) extra += ' Not in a clear line from you.';
       setInfo(u.k, n, d + extra);
@@ -575,7 +581,8 @@ function Play(opts) {
       trial.turns++;
     } else {
       res = playTurn(run, a);
-      saveRun(opts.slot, run);
+      if (run.over) finishRun(run, opts.slot);
+      else saveRun(opts.slot, run);
     }
     const killsNow = res.ev.filter((e) => (e.t === 'die' || e.t === 'sink') && e.id !== 0).length;
     const final = clone(S());
@@ -614,7 +621,6 @@ function Play(opts) {
   function afterRunTurn(res) {
     if (res.hurt > 0) buzz([30, 30, 30]);
     if (run.over === 'lost') {
-      finishRun(run, opts.slot);
       sfx('lost');
       view.snuff(wisp(run.state).id).then(() => setTimeout(() => endSheet(), 300));
       refresh();
@@ -626,7 +632,6 @@ function Play(opts) {
       banner(done ? 'Dawn' : `${HOUR_NAMES[run.depth - 1]} is over`, res.flawless ? `Unseen! +${res.clearBonus}` : `+${res.clearBonus}`);
       refresh();
       if (done) {
-        finishRun(run, opts.slot);
         setTimeout(() => {
           sfx('dawn');
           endSheet();
@@ -729,7 +734,7 @@ function Play(opts) {
               {
                 class: 'btn',
                 onclick: async () => {
-                  const text = shareText(run);
+                  const text = shareText(run.daily, db.daily[run.daily]?.first);
                   try {
                     if (navigator.share) await navigator.share({ text });
                     else {
@@ -857,8 +862,10 @@ function Play(opts) {
     );
   }
 
+  const solved = () => isTrial && enemies(trial.s).length === 0;
+
   function undo() {
-    if (view.busy || !history.length) return;
+    if (view.busy || !history.length || solved()) return;
     trial = history.pop();
     view.setState(trial.s, 11);
     fit();
@@ -867,7 +874,7 @@ function Play(opts) {
   }
 
   function restart() {
-    if (view.busy) return;
+    if (view.busy || solved()) return;
     history = [];
     trial = { s: loadTrial(tdef), turns: 0, failed: null };
     view.setState(trial.s, 11);
@@ -877,14 +884,13 @@ function Play(opts) {
   }
 
   function hint() {
-    const sol = solve(trial.s, tdef.turns - trial.turns);
+    const sol = trial.failed ? null : solve(trial.s, tdef.turns - trial.turns);
     if (!sol) {
       toast('No way out from here. Undo or restart.');
       return;
     }
-    const a = sol[0];
     sel = null;
-    tapAction(a);
+    tapAction(sol[0], true);
   }
 
   function pause() {
@@ -991,8 +997,11 @@ function Play(opts) {
   const onExt = () => {
     if (isTrial || view.busy) return;
     const r = loadRun(opts.slot);
-    if (r && r.turns > run.turns) {
+    if (!r || r.seed !== run.seed || r.started !== run.started) return go(Home);
+    if (r.turns > run.turns || (r.turns === run.turns && !!r.offers !== !!run.offers)) {
       run = r;
+      sel = null;
+      mode = null;
       view.setState(run.state, run.depth * 7919 + (run.seed.length || 1));
       fit();
       refresh();
@@ -1001,7 +1010,7 @@ function Play(opts) {
   const offExt = onExternalChange(onExt);
 
   const onKey = (e) => {
-    if ($sheets.children.length) return;
+    if ($sheets.children.length || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
     const s = S();
     const p = wisp(s);
     const dirs = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0], w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0] };
@@ -1047,10 +1056,10 @@ function hourMarks(run) {
   return run.hourLog.map((h) => (h.hurt === 0 ? '✨' : h.hurt === 1 ? '🕯️' : '🔥')).join(' ');
 }
 
-function shareText(run) {
-  const hour = run.over === 'won' ? 'Dawn' : HOUR_NAMES[run.depth - 1];
-  const marks = hourMarks(run).replace(/ /g, '');
-  return `Marshlight · ${run.daily}\n${run.over === 'won' ? 'Survived until dawn' : 'Caught at ' + hour} · ${fmt(run.score)} lights\n${marks}\n${run.kills} hunters felled, ${run.drowned} in the bog`;
+function shareText(day, f) {
+  if (!f) return `Marshlight · ${day}`;
+  const end = f.won ? 'Survived until dawn' : `Caught at ${HOUR_NAMES[f.hour - 1]}`;
+  return `Marshlight · ${day}\n${end} · ${fmt(f.score)} lights\n${(f.marks || '').replace(/ /g, '')}\n${f.kills ?? '?'} hunters felled, ${f.drowned ?? '?'} in the bog`;
 }
 
 /* ------------------------------------------------------------------ */

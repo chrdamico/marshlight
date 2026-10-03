@@ -5,8 +5,8 @@
   "type": "module",
   "description": "A pocket tactics game for one night. You are a will-o'-the-wisp who cannot attack.",
   "scripts": {
-    "test": "node --test test/*.test.mjs",
-    "serve": "python3 -m http.server 8080 -d public",
+    "test": "node tools/stamp-sw.mjs dev && node --test test/*.test.mjs",
+    "serve": "node tools/stamp-sw.mjs dev && python3 -m http.server 8080 -d public",
     "sim": "node tools/sim.mjs",
     "trials": "node tools/gen-trials.mjs 500",
     "icons": "python3 tools/make-icons.py",

@@ -94,7 +94,7 @@ export function playTurn(run, action) {
   const before = enemies(s).length;
   const hpBefore = wisp(s).hp;
   const res = step(s, action);
-  const fled = res.ev.some((e) => e.t === 'flee') ? 1 : 0;
+  const fled = res.ev.filter((e) => e.t === 'flee').length;
   const kills = Math.max(0, before - enemies(s).length - fled);
   const drowned = res.ev.filter((e) => e.t === 'sink').length;
   const pts = kills ? turnPoints(kills, drowned) : 0;

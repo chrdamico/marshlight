@@ -150,7 +150,7 @@ if (!isMainThread) {
     const raw = randomPuzzle(rng, cfg);
     if (!raw) continue;
     const map = toMap(raw);
-    const rest = enemies(raw).filter((e) => e.cd > 0).map((e) => [e.x, e.y]);
+    const rest = enemies(raw).filter((e) => e.rest).map((e) => [e.x, e.y]);
     const s = loadTrial({ map, rest });
     const ev = evaluate(s, cfg);
     if (!ev) continue;

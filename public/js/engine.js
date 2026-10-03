@@ -426,6 +426,7 @@ export function plan(s, ev = []) {
     const reach = [];
     for (const [k, dd] of dist) if (dd <= move) reach.push([k % s.w, Math.floor(k / s.w), dd]);
     const resting = e.cd > 0;
+    e.rest = resting;
     let best = null;
     if (!resting) {
       for (const [x, y, dd] of reach) {
@@ -532,7 +533,9 @@ export function preview(s, a) {
 export function aimInPlace(s) {
   const p = wisp(s);
   for (const e of enemies(s)) {
-    e.it = e.cd > 0 ? null : attackFrom(s, e, e.x, e.y, p);
+    e.rest = e.cd > 0;
+    e.cd = 0;
+    e.it = e.rest ? null : attackFrom(s, e, e.x, e.y, p);
     if (e.it && e.it.d != null) e.d = e.it.d;
   }
 }
