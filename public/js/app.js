@@ -1,5 +1,5 @@
 import { db, persist, saveRun, loadRun, touchBest, touchSettings, markSeen, resetAll, onExternalChange } from './store.js';
-import { sfx, buzz } from './sound.js';
+import { sfx, buzz, ambient } from './sound.js';
 import { BoardView } from './render.js';
 import { actions, sameAction, preview, wisp, enemies, unitAt, clone, step, isEnemy } from './engine.js';
 import { newRun, playTurn, chooseBoon, BOONS, HOURS, HOUR_NAMES, MOONS } from './run.js';
@@ -147,10 +147,12 @@ function fmt(n) {
 let current = null;
 
 function go(screen, ...args) {
+  if (screen !== Home && !history.state?.inner) history.pushState({ inner: true }, '');
   if (current?.destroy) current.destroy();
   closeSheets();
   $app.innerHTML = '';
-  document.body.classList.toggle('playing', screen === Play);
+  document.body.classList.toggle('playing', screen !== Home);
+  ambient(screen === Play);
   current = screen(...args) || null;
 }
 
@@ -331,6 +333,7 @@ function Play(opts) {
   if (isTrial) {
     tdef = TRIALS.find((t) => t.id === opts.id) || TRIALS[0];
     trial = { s: loadTrial(tdef), turns: 0, failed: null };
+    for (const u of trial.s.u) if (u.k !== 'wisp') markSeen(`kind:${u.k}`);
   } else {
     run = loadRun(opts.slot);
     if (!run) return go(Home);
@@ -488,8 +491,14 @@ function Play(opts) {
     return `Swap with the ${INFO[u.k][0]}`;
   }
 
+  function locked() {
+    if (view.busy || !alive) return true;
+    if (isTrial) return !!trial.failed || enemies(trial.s).length === 0;
+    return !!(run.offers || run.over);
+  }
+
   function tapAction(a) {
-    if (view.busy || !alive || trial?.failed) return;
+    if (locked()) return;
     const legal = actions(S()).find((b) => b.type === a.type && b.x === a.x && b.y === a.y && (a.id == null || b.id === a.id));
     if (!legal) return;
     const cell = a.x != null ? [a.x, a.y] : [wisp(S()).x, wisp(S()).y];
@@ -506,11 +515,10 @@ function Play(opts) {
   }
 
   function onTap(cell) {
-    if (view.busy || !alive) return;
+    if (locked()) return;
     const s = S();
     const [x, y] = cell;
     const p = wisp(s);
-    if (trial?.failed) return;
     if (mode === 'mire') {
       if (actions(s).some((a) => a.type === 'mire' && a.x === x && a.y === y)) tapAction({ type: 'mire', x, y });
       else {
@@ -544,6 +552,7 @@ function Play(opts) {
   let downAt = null;
   canvas.addEventListener('pointerdown', (e) => {
     downAt = [e.clientX, e.clientY];
+    view.poke();
   });
   canvas.addEventListener('pointerup', (e) => {
     if (!downAt) return;
@@ -664,6 +673,7 @@ function Play(opts) {
   function nextHour() {
     view.setState(run.state, run.depth * 7919 + (run.seed.length || 1));
     fit();
+    view.fadeIn();
     sel = null;
     refresh();
     banner(HOUR_NAMES[run.depth - 1], run.depth === HOURS ? 'The Witchfinder comes' : THEMES[run.state.theme]?.name || `Hour ${run.depth} of ${HOURS}`);
@@ -709,6 +719,7 @@ function Play(opts) {
             el('div', {}, el('b', {}, String(run.drowned)), el('span', {}, 'In the bog')),
           ),
         );
+        if (run.hourLog.length) box.append(el('p', { class: 'marks', title: 'Each hour: sparkle = no hits, candle = one hit, flame = more' }, hourMarks(run)));
         if (won && run.moon < 5) box.append(el('p', {}, `A brighter moon rises: ${MOONS[Math.min(5, run.moon + 1)].name} is open on the home screen.`));
         const btns = el('div', { class: 'btns' });
         if (run.daily) {
@@ -1005,7 +1016,7 @@ function Play(opts) {
       sel = null;
       mode = null;
       refresh();
-    } else if (e.key === 'Enter' && sel) {
+    } else if (e.key === 'Enter' && sel && !locked()) {
       commit(sel.a);
     } else if (e.key === 'z' && isTrial) undo();
   };
@@ -1032,9 +1043,13 @@ function Play(opts) {
   };
 }
 
+function hourMarks(run) {
+  return run.hourLog.map((h) => (h.hurt === 0 ? '✨' : h.hurt === 1 ? '🕯️' : '🔥')).join(' ');
+}
+
 function shareText(run) {
   const hour = run.over === 'won' ? 'Dawn' : HOUR_NAMES[run.depth - 1];
-  const marks = run.hourLog.map((h) => (h.hurt === 0 ? '✨' : h.hurt === 1 ? '🕯️' : '🔥')).join('');
+  const marks = hourMarks(run).replace(/ /g, '');
   return `Marshlight · ${run.daily}\n${run.over === 'won' ? 'Survived until dawn' : 'Caught at ' + hour} · ${fmt(run.score)} lights\n${marks}\n${run.kills} hunters felled, ${run.drowned} in the bog`;
 }
 
@@ -1130,6 +1145,7 @@ function settings(after) {
         opt('confirm', 'Tap twice to move', 'First tap shows what happens. Good for bumpy flights.'),
         opt('hints', 'Show possible moves', 'Dots for drifts, rings for swaps.'),
         opt('sound', 'Sound'),
+        opt('ambient', 'Night sounds', 'Quiet crickets and frogs while you play.'),
         opt('haptics', 'Vibration'),
         opt('unlockAll', 'Open all trials'),
       );
@@ -1181,6 +1197,8 @@ function settings(after) {
 }
 
 /* ------------------------------------------------------------------ */
+
+window.addEventListener('popstate', () => go(Home));
 
 initPWA({ onUpdate: () => toast('Updated. Restart the app to get the new version.', 4000) });
 document.fonts?.ready.then(() => current?.refresh?.());

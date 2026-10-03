@@ -472,3 +472,4 @@ body.playing .moon { opacity: 0; transition: opacity 0.4s; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+.sheet .marks { font-size: 20px; letter-spacing: 2px; text-align: center; margin: 4px 0 8px; }

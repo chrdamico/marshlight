@@ -89,6 +89,7 @@ export function turnPoints(kills, drowned) {
 }
 
 export function playTurn(run, action) {
+  if (run.offers || run.over) throw new Error('the hour is over');
   const s = run.state;
   const before = enemies(s).length;
   const hpBefore = wisp(s).hp;

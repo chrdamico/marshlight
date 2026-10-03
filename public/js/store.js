@@ -1,7 +1,7 @@
 const KEY = 'marshlight:v1';
 const BAK = 'marshlight:v1:bak';
 
-const DEFAULT_SETTINGS = { sound: true, haptics: true, confirm: true, hints: true, _u: 0 };
+const DEFAULT_SETTINGS = { sound: true, ambient: true, haptics: true, confirm: true, hints: true, _u: 0 };
 
 function fresh() {
   return {

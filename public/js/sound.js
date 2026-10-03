@@ -116,6 +116,33 @@ export function sfx(name, arg) {
   } catch {}
 }
 
+let ambT = 0;
+let ambOn = false;
+
+function cricket() {
+  const base = 4200 + Math.random() * 900;
+  const n = 2 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < n; i++) tone(base, { at: i * 0.075, dur: 0.045, gain: 0.006, attack: 0.004 });
+}
+
+function frog() {
+  const f = 150 + Math.random() * 70;
+  tone(f, { dur: 0.09, gain: 0.03, type: 'triangle', slide: 0.7 });
+  tone(f * 1.1, { at: 0.13, dur: 0.12, gain: 0.025, type: 'triangle', slide: 0.6 });
+}
+
+function ambientTick() {
+  if (!ambOn || !db.settings.sound || !db.settings.ambient || document.visibilityState === 'hidden') return;
+  if (Math.random() < 0.55) cricket();
+  if (Math.random() < 0.12) setTimeout(frog, 400 + Math.random() * 900);
+}
+
+export function ambient(on) {
+  ambOn = on;
+  clearInterval(ambT);
+  if (on) ambT = setInterval(ambientTick, 2300);
+}
+
 export function buzz(pattern = 10) {
   if (!db.settings.haptics) return;
   try {

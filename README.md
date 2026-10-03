@@ -23,6 +23,13 @@ Turn-based, no timers, works offline. Made for long flights.
 - Marsh gas bursts when hit and hurts all 8 cells around it.
 - When one hunter is left, he runs away and the hour ends.
 
+## Design notes
+
+- One verb. The swap is your only weapon, and it is also your best escape. Every hunter who lines up to hit you also lines up to be swapped.
+- Full information. Attacks are shown before you move and land at the same time, so every hit you take is a mistake you can see. The preview shows the exact result of a move.
+- The hunters are not stupid: they avoid crossfire, avoid standing in each other's attacks, and never step into the bog. Friendly fire has to be earned.
+- Balance comes from simulation. A bot with a two-move search plays hundreds of nights per change (`npm run sim`). It wins about 95% of New Moon nights and about 55% under the Full Moon. People play less exhaustively, so expect the first dawn to take a few nights.
+
 ## Develop
 
 ```bash

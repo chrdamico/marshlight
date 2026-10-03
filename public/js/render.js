@@ -35,7 +35,8 @@ export class BoardView {
     this.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.sfx = () => {};
     this.frame = this.frame.bind(this);
-    this.onVis = () => this.kick();
+    this.lastInput = performance.now();
+    this.onVis = () => this.poke();
     document.addEventListener('visibilitychange', this.onVis);
   }
 
@@ -146,6 +147,11 @@ export class BoardView {
 
   setOverlay(o) {
     this.overlay = o || {};
+    this.poke();
+  }
+
+  poke() {
+    this.lastInput = performance.now();
     this.kick();
   }
 
@@ -223,7 +229,7 @@ export class BoardView {
     const active = this.tweens.length || this.fx.length || this.parts.length || this.shake > 0.01;
     if (document.visibilityState === 'hidden') return;
     if (active) this.raf = requestAnimationFrame(this.frame);
-    else if (!this.reduce) {
+    else if (!this.reduce && now - this.lastInput < 20000) {
       clearTimeout(this.idleT);
       this.idleT = setTimeout(() => this.kick(), 90);
     }
@@ -260,6 +266,15 @@ export class BoardView {
     for (const f of this.fx) f.draw(g, now);
     this.drawParticles(g, now);
     this.drawPreviewMarks(g, now);
+    if (this.fade > 0) {
+      g.fillStyle = `rgba(5,7,15,${this.fade})`;
+      g.fillRect(0, 0, W, H);
+    }
+  }
+
+  fadeIn(ms = 700) {
+    this.fade = 1;
+    return this.tween(ms, (t) => (this.fade = 1 - easeOut(t)));
   }
 
   drawWater(g, now) {
@@ -908,15 +923,15 @@ export class BoardView {
     for (const e of rest) if (e.t === 'die' || e.t === 'sink' || e.t === 'pop') this.units.delete(e.id);
     if (opts.afterAttacks) await opts.afterAttacks();
     const moves = [];
+    const flees = [];
     for (; i < ev.length; i++) {
       const e = ev[i];
-      if (e.t === 'flee') {
-        await this.fleeAnim(U(e.id));
-        this.units.delete(e.id);
-        if (opts.onFlee) opts.onFlee(e);
-      } else if (e.t === 'move' && !e.fast) {
-        moves.push(e);
-      }
+      if (e.t === 'flee') flees.push(e);
+      else if (e.t === 'move' && !e.fast) moves.push(e);
+    }
+    if (flees.length) {
+      await Promise.all(flees.map((e) => this.fleeAnim(U(e.id))));
+      for (const e of flees) this.units.delete(e.id);
     }
     if (moves.length) {
       const segs = Math.max(...moves.map((m) => m.path.length - 1));
