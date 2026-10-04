@@ -273,7 +273,7 @@ function Home() {
   menu.append(el('button', { class: 'btn stack', onclick: () => go(TrialList) }, 'Trials', el('small', {}, `${trialsDone()} of ${TRIALS.length} puzzles solved`)));
   const row = el('div', { class: 'row' }, el('button', { class: 'btn small', onclick: () => almanac() }, 'Almanac'), el('button', { class: 'btn small', onclick: () => settings() }, 'Settings'));
   menu.append(row);
-  if (!isStandalone() && (canPrompt() || isIOS())) {
+  if (!isStandalone()) {
     menu.append(
       el(
         'button',
@@ -282,11 +282,11 @@ function Home() {
           onclick: async () => {
             if (canPrompt()) {
               const ok = await promptInstall();
-              if (ok) toast('Installed. It works offline.');
-            } else toast('Tap Share, then “Add to Home Screen”.', 4000);
+              if (ok) toast('Installing… Look for Marshlight on your home screen.', 4000);
+            } else installHelp();
           },
         },
-        'Install for offline play',
+        'Install app',
       ),
     );
   }
@@ -1234,6 +1234,22 @@ function settings(after) {
       );
     },
     { onClose: after },
+  );
+}
+
+function installHelp() {
+  sheet(
+    (box, close) => {
+      box.append(
+        el('h2', {}, 'Install Marshlight'),
+        isIOS()
+          ? el('p', { html: 'Open this page in <b>Safari</b>, tap <b>Share</b>, then <b>Add to Home Screen</b>.' })
+          : el('p', { html: 'Open the browser menu <b>⋮</b> and choose <b>Install app</b> or <b>Add to home screen</b>, then <b>Install</b>.' }),
+        el('p', {}, 'If the browser says Marshlight is already installed, look for it in your app list.'),
+        el('div', { class: 'btns' }, el('button', { class: 'btn primary', onclick: close }, 'Got it')),
+      );
+    },
+    { center: true },
   );
 }
 
