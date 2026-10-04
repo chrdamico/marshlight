@@ -10,7 +10,10 @@ globalThis.localStorage = {
 globalThis.window = { addEventListener() {} };
 globalThis.document = { addEventListener() {}, visibilityState: 'visible' };
 
-const { mergeInto, normalize } = await import('../public/js/store.js');
+globalThis.btoa ??= (s) => Buffer.from(s, 'binary').toString('base64');
+globalThis.atob ??= (s) => Buffer.from(s, 'base64').toString('binary');
+
+const { mergeInto, normalize, db, exportCode, importCode, resetAll } = await import('../public/js/store.js');
 
 test('a newer run in another tab wins, an older one does not', () => {
   const t = normalize({ slots: { main: { run: { depth: 3 }, at: 100 } } });
@@ -45,4 +48,23 @@ test('an erase is not undone by an old tab', () => {
   mergeInto(old, normalize({ resetAt: 1000 }));
   assert.equal(Object.keys(old.trials).length, 0);
   assert.equal(old.settings.sound, true);
+});
+
+test('a backup code restores progress and never removes any', () => {
+  db.trials.a = { stars: 2, at: 10 };
+  db.best.hour = 6;
+  db.best.at = 10;
+  const code = exportCode();
+  assert.match(code, /^MARSH1:/);
+  resetAll();
+  assert.equal(Object.keys(db.trials).length, 0);
+  db.trials.b = { stars: 1, at: Date.now() };
+  const added = importCode(`here: ${code}`);
+  assert.equal(added, 1);
+  assert.deepEqual(Object.keys(db.trials).sort(), ['a', 'b']);
+  assert.equal(db.best.hour, 6);
+  const stored = JSON.parse(mem.get('marshlight:v1'));
+  assert.equal(stored.trials.a.stars, 2);
+  assert.equal(JSON.parse(mem.get('marshlight:v1:bak')).trials.a.stars, 2);
+  assert.throws(() => importCode('nonsense'));
 });

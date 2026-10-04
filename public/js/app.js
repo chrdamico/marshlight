@@ -1,4 +1,4 @@
-import { db, persist, saveRun, loadRun, touchBest, touchSettings, markSeen, resetAll, onExternalChange } from './store.js';
+import { db, persist, saveRun, loadRun, touchBest, touchSettings, markSeen, resetAll, onExternalChange, exportCode, importCode } from './store.js';
 import { sfx, buzz, ambient } from './sound.js';
 import { BoardView } from './render.js';
 import { actions, sameAction, preview, wisp, enemies, unitAt, clone, step, isEnemy } from './engine.js';
@@ -147,6 +147,7 @@ function fmt(n) {
 /* ------------------------------------------------------------------ */
 
 let current = null;
+let currentScreen = null;
 
 function go(screen, ...args) {
   if (screen !== Home && !history.state?.inner) history.pushState({ inner: true }, '');
@@ -155,8 +156,13 @@ function go(screen, ...args) {
   $app.innerHTML = '';
   document.body.classList.toggle('playing', screen !== Home);
   ambient(screen === Play);
+  currentScreen = screen;
   current = screen(...args) || null;
 }
+
+onExternalChange(() => {
+  if (currentScreen === Home && !$sheets.children.length) go(Home);
+});
 
 function trialsDone() {
   return TRIALS.filter((t) => db.trials[t.id]).length;
@@ -1161,6 +1167,30 @@ function settings(after) {
         opt('unlockAll', 'Open all trials'),
       );
       box.append(
+        el('div', { class: 'toggle' }, el('div', { class: 'l' }, 'Backup', el('small', {}, 'Move your progress to another browser or phone. Restoring only adds progress.'))),
+        el(
+          'div',
+          { class: 'btns two' },
+          el(
+            'button',
+            {
+              class: 'btn small',
+              onclick: async () => {
+                const code = exportCode();
+                try {
+                  await navigator.clipboard.writeText(code);
+                  toast('Backup code copied.');
+                } catch {
+                  backupSheet(code);
+                }
+              },
+            },
+            'Copy code',
+          ),
+          el('button', { class: 'btn small', onclick: () => backupSheet() }, 'Restore'),
+        ),
+      );
+      box.append(
         el(
           'div',
           { class: 'btns' },
@@ -1204,6 +1234,41 @@ function settings(after) {
       );
     },
     { onClose: after },
+  );
+}
+
+function backupSheet(code) {
+  sheet(
+    (box, close) => {
+      const area = el('textarea', { class: 'code', rows: '5', spellcheck: 'false', autocapitalize: 'off', placeholder: 'Paste a backup code' });
+      if (code) area.value = code;
+      box.append(el('h2', {}, code ? 'Backup code' : 'Restore'), el('p', {}, code ? 'Copy this code and keep it somewhere safe.' : 'Paste a backup code. Progress is only added, never removed.'), area);
+      const btns = el('div', { class: 'btns' });
+      if (!code)
+        btns.append(
+          el(
+            'button',
+            {
+              class: 'btn primary',
+              onclick: () => {
+                try {
+                  const n = importCode(area.value);
+                  close();
+                  toast(n > 0 ? `Restored. ${n} more trial${n === 1 ? '' : 's'} solved.` : 'Restored.');
+                  if (currentScreen === Home) go(Home);
+                } catch {
+                  toast('That is not a Marshlight backup code.');
+                }
+              },
+            },
+            'Restore',
+          ),
+        );
+      btns.append(el('button', { class: 'btn', onclick: close }, code ? 'Done' : 'Cancel'));
+      box.append(btns);
+      if (code) setTimeout(() => area.select(), 50);
+    },
+    { center: true },
   );
 }
 
