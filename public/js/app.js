@@ -60,9 +60,11 @@ function el(tag, attrs = {}, ...kids) {
 }
 
 let toastT = 0;
-function toast(msg, ms = 2200) {
+function toast(msg, ms = 2200, action) {
   const t = document.getElementById('toast');
   t.textContent = msg;
+  t.classList.toggle('act', !!action);
+  if (action) t.append(el('button', { onclick: action.run }, action.label));
   t.classList.add('show');
   clearTimeout(toastT);
   toastT = setTimeout(() => t.classList.remove('show'), ms);
@@ -1209,6 +1211,6 @@ function settings(after) {
 
 window.addEventListener('popstate', () => go(Home));
 
-initPWA({ onUpdate: () => toast('Updated. Restart the app to get the new version.', 4000) });
+initPWA({ onUpdate: () => toast('Marshlight was updated.', 12000, { label: 'Reload', run: () => location.reload() }) });
 document.fonts?.ready.then(() => current?.refresh?.());
 go(Home);

@@ -467,6 +467,9 @@ body.playing .moon { opacity: 0; transition: opacity 0.4s; }
   text-align: center;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
+#toast.act { display: flex; align-items: center; gap: 12px; white-space: nowrap; padding: 6px 6px 6px 16px; }
+#toast.act.show { pointer-events: auto; }
+#toast button { border: none; border-radius: 999px; padding: 6px 14px; font: inherit; background: var(--wisp); color: var(--bg); cursor: pointer; }
 
 
 @media (prefers-reduced-motion: reduce) {
