@@ -2,7 +2,7 @@
   "name": "Marshlight",
   "short_name": "Marshlight",
   "description": "A tactics game for one night. You are a will-o'-the-wisp. You cannot attack. Trick the hunters into hitting each other, or lure them into the bog.",
-  "id": "./",
+  "id": "/marshlight/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
