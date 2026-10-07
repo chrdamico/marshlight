@@ -8,6 +8,7 @@ import { TRIALS, CHAPTERS, loadTrial } from './trials.js';
 import { sprite } from './sprites.js';
 import { initPWA, canPrompt, promptInstall, isStandalone, isIOS } from './pwa.js';
 import { solve } from './solver.js';
+import { VERSION } from './version.js';
 
 const $app = document.getElementById('app');
 const $sheets = document.getElementById('sheet-root');
@@ -1262,6 +1263,7 @@ function settings(after) {
             'Erase progress',
           ),
         ),
+        el('p', { class: 'ver' }, `Version ${VERSION}`),
       );
     },
     { onClose: after },

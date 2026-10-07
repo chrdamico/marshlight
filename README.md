@@ -59,7 +59,7 @@ No build step. `public/` is the whole site.
 
 ## Deploy
 
-Static hosting of `public/`. `.github/workflows/pages.yml` runs the tests, stamps the service worker with the commit SHA (so installed apps update) and publishes to GitHub Pages.
+Static hosting of `public/`. `.github/workflows/pages.yml` runs the tests, stamps the service worker and `js/version.js` with the commit date and SHA (so installed apps update, and Settings shows the running version) and publishes to GitHub Pages.
 
 ## Install on a phone
 

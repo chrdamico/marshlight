@@ -1,5 +1,5 @@
 const VERSION = 'dev';
-const ASSETS = ["./app.webmanifest","./css/style.css","./fonts/fell-english-italic.woff2","./fonts/fell-english.woff2","./fonts/nunito-latin.woff2","./icons/apple-touch-icon.png","./icons/favicon-32.png","./icons/favicon.svg","./icons/icon-192.png","./icons/icon-512.png","./icons/maskable-512.png","./index.html","./js/app.js","./js/bot.js","./js/engine.js","./js/gen.js","./js/pwa.js","./js/render.js","./js/rng.js","./js/run.js","./js/solver.js","./js/sound.js","./js/sprites.js","./js/store.js","./js/trials-data.js","./js/trials.js"];
+const ASSETS = ["./app.webmanifest","./css/style.css","./fonts/fell-english-italic.woff2","./fonts/fell-english.woff2","./fonts/nunito-latin.woff2","./icons/apple-touch-icon.png","./icons/favicon-32.png","./icons/favicon.svg","./icons/icon-192.png","./icons/icon-512.png","./icons/maskable-512.png","./index.html","./js/app.js","./js/bot.js","./js/engine.js","./js/gen.js","./js/pwa.js","./js/render.js","./js/rng.js","./js/run.js","./js/solver.js","./js/sound.js","./js/sprites.js","./js/store.js","./js/trials-data.js","./js/trials.js","./js/version.js"];
 const CACHE = `marshlight-${VERSION}`;
 const DEV = ['localhost', '127.0.0.1'].includes(self.location.hostname);
 
