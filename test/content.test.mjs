@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { TRIALS, CHAPTERS, loadTrial } from '../public/js/trials.js';
 import { solve } from '../public/js/solver.js';
 import { actions, step, enemies, wisp } from '../public/js/engine.js';
-import { newRun, playTurn, chooseBoon, HOURS, BOONS } from '../public/js/run.js';
+import { newRun, playTurn, chooseBoon, upgradeRun, HOURS, BOONS } from '../public/js/run.js';
+import { breath, maxBreath } from '../public/js/engine.js';
 import { botMove } from '../public/js/bot.js';
 
 test('every trial can be solved in its turn limit', () => {
@@ -55,4 +56,32 @@ test('a daily night is the same for everyone', () => {
   const a = newRun({ seed: 'daily:2026-10-03', daily: '2026-10-03' });
   const b = newRun({ seed: 'daily:2026-10-03', daily: '2026-10-03' });
   assert.deepEqual(a.state, b.state);
+});
+
+test('gifts change breath and charges', () => {
+  const run = newRun({ seed: 'gifts' });
+  run.offers = ['lungs'];
+  chooseBoon(run, 'lungs');
+  assert.equal(maxBreath(run.state), 2);
+  assert.equal(breath(run.state), 2);
+  run.offers = ['lure'];
+  chooseBoon(run, 'lure');
+  assert.equal(run.state.charges.lure, 1);
+  const moon = newRun({ seed: 'gibbous', moon: 4 });
+  assert.equal(moon.state.rules.help, 3);
+  assert.equal(moon.state.rules.refund, false);
+});
+
+test('an old saved night is upgraded', () => {
+  const run = newRun({ seed: 'old', moon: 4 });
+  run.boons = { drift: 1, breath: 1 };
+  run.state.rules = { swapCd: 2, step: 8, bogBreath: true };
+  wisp(run.state).cd = 2;
+  upgradeRun(run);
+  assert.deepEqual(Object.keys(run.boons).sort(), ['lungs', 'second']);
+  assert.equal(run.state.rules.step, undefined);
+  assert.equal(maxBreath(run.state), 2);
+  assert.equal(breath(run.state), 2);
+  const p = wisp(run.state);
+  assert.ok(actions(run.state).filter((a) => a.type === 'step').every((a) => a.x === p.x || a.y === p.y));
 });

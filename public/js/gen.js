@@ -140,6 +140,9 @@ export function makeFloor(rng, depth, { w = 7, h = 8, hp = 3, mhp = 3, kinds = n
     s.depth = depth;
     s.theme = theme;
     s.party = list.length;
+    s.helpPool = ROSTER.filter((r) => r.from <= depth).flatMap((r) => Array(r.w).fill(r.k));
+    s.helpSeed = Math.floor(rng() * 2 ** 31);
+    s.calm = 0;
     if (boss) s.bossFight = true;
     plan(s);
     return s;

@@ -1,6 +1,6 @@
 import { mulberry32, hashString, shuffle } from './rng.js';
 import { makeFloor, pickTheme } from './gen.js';
-import { step, wisp, enemies, clone } from './engine.js';
+import { step, wisp, enemies, clone, RULES } from './engine.js';
 
 export const HOURS = 9;
 export const HOUR_NAMES = ['9 PM', '10 PM', '11 PM', 'Midnight', '1 AM', '2 AM', '3 AM', '4 AM', '5 AM', 'Dawn'];
@@ -8,12 +8,13 @@ export const HOUR_NAMES = ['9 PM', '10 PM', '11 PM', 'Midnight', '1 AM', '2 AM',
 export const BOONS = {
   heartwood: { name: 'Heartwood', text: 'One more heart. Heal one.', icon: 'heart', max: 2 },
   dew: { name: 'Moon Dew', text: 'Heal all your hearts.', icon: 'dew', max: 9 },
-  drift: { name: 'Drift', text: 'You can drift diagonally too.', icon: 'drift', max: 1 },
+  lungs: { name: 'Deep Lungs', text: 'Hold one more breath.', icon: 'breath', max: 1 },
   reach: { name: 'Long Reach', text: 'Swap with the first or the second thing in a line.', icon: 'reach', max: 1 },
-  breath: { name: 'Bog Breath', text: 'When a hunter sinks, you can swap again at once.', icon: 'breath', max: 1 },
+  second: { name: 'Second Wind', text: 'When a hit lands on you, all your breath comes back.', icon: 'wind', max: 1 },
   veil: { name: 'Mist Veil', text: 'Each hour, the first hit on you does nothing.', icon: 'veil', max: 1 },
   gust: { name: 'Gust', text: 'Once each hour: push everything next to you one cell away.', icon: 'gust', max: 1 },
   mire: { name: 'Mire', text: 'Once each hour: turn an empty cell next to you into bog.', icon: 'mire', max: 1 },
+  lure: { name: 'Lure', text: 'Once each hour: call a hunter in a line. He walks to your light until something stops him, or the bog takes him.', icon: 'lure', max: 1 },
   kindling: { name: 'Kindling', text: 'Each hour starts with two more gas bubbles.', icon: 'gas', max: 2 },
 };
 
@@ -22,17 +23,17 @@ export const MOONS = [
   { name: 'New Moon', text: 'The usual night.' },
   { name: 'Crescent', text: 'Bigger hunting parties.' },
   { name: 'Half Moon', text: 'Bigger parties. No healing between hours.' },
-  { name: 'Gibbous', text: 'As above, and you rest two turns after a swap.' },
+  { name: 'Gibbous', text: 'As above. Help comes sooner, and the bog gives no breath back.' },
   { name: 'Full Moon', text: 'As above, and no hunter needs to reload.' },
 ];
 
 function moonMult(moon) {
-  return moon >= 2 ? 2 : 1.6;
+  return moon >= 2 ? 2.4 : 2;
 }
 
 function moonRules(moon) {
   const r = {};
-  if (moon >= 4) r.swapCd = 2;
+  if (moon >= 4) Object.assign(r, { help: 3, refund: false });
   if (moon >= 5) r.noReload = ['bow', 'hound', 'flask', 'priest'];
   return r;
 }
@@ -66,17 +67,45 @@ export function floorRng(run, salt = '') {
   return mulberry32(hashString(`${run.seed}:${run.depth}:${salt}`));
 }
 
+function floorRules(run) {
+  const b = run.boons;
+  const r = { ...moonRules(run.moon), ...(run.rules || {}) };
+  if (b.lungs) r.breath = (r.breath ?? RULES.breath) + 1;
+  if (b.second) r.secondWind = true;
+  if (b.reach) r.reach = true;
+  return r;
+}
+
+const OLD_BOONS = { drift: 'lungs', breath: 'second' };
+
+export function upgradeRun(run) {
+  if (!run) return run;
+  let changed = false;
+  for (const [old, now] of Object.entries(OLD_BOONS)) {
+    if (!run.boons[old]) continue;
+    delete run.boons[old];
+    run.boons[now] = 1;
+    changed = true;
+  }
+  if (run.offers) run.offers = run.offers.map((k) => OLD_BOONS[k] || k);
+  const s = run.state;
+  if (s && (changed || !s.rules || s.rules.swapCd != null || s.rules.step != null || s.rules.bogBreath != null)) {
+    s.rules = floorRules(run);
+    if (run.boons.lure && s.charges && s.charges.lure == null) s.charges.lure = 0;
+    const p = s.u.find((u) => u.k === 'wisp');
+    if (p) delete p.cd;
+  }
+  return run;
+}
+
 export function startFloor(run) {
   const rng = floorRng(run);
   const b = run.boons;
   const final = run.depth === HOURS;
   const theme = pickTheme(rng, run.depth, final);
   const s = makeFloor(rng, run.depth, { hp: run.hp, mhp: run.mhp, mult: moonMult(run.moon), extraGas: (b.kindling || 0) * 2, theme, boss: final });
-  s.rules = { ...moonRules(run.moon), ...(run.rules || {}) };
-  if (b.drift) s.rules.step = 8;
-  if (b.reach) s.rules.reach = true;
-  if (b.breath) s.rules.bogBreath = true;
-  s.charges = { gust: b.gust ? 1 : 0, mire: b.mire ? 1 : 0 };
+  s.rules = floorRules(run);
+  s.charges = { gust: b.gust ? 1 : 0, mire: b.mire ? 1 : 0, lure: b.lure ? 1 : 0 };
   s.veil = b.veil ? 1 : 0;
   run.state = s;
   run.floorStart = { score: run.score, hp: run.hp };

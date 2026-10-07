@@ -1,5 +1,5 @@
 import { intentCells, enemies, terr, unitAt, BOG, ROCK } from '../public/js/engine.js';
-const CH = { wisp: '@', fork: 'f', bow: 'b', hound: 'h', flask: 'a', knight: 'k', priest: 'p', witch: 'w', gas: 'o' };
+const CH = { wisp: '@', fork: 'f', bow: 'b', hound: 'h', flask: 'a', knight: 'k', priest: 'p', witch: 'w', finder: 'x', gas: 'o' };
 export function draw(s) {
   const threat = new Set();
   for (const e of enemies(s)) for (const [x, y] of intentCells(s, e)) threat.add(y * s.w + x);

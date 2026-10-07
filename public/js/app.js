@@ -1,8 +1,8 @@
 import { db, persist, saveRun, loadRun, touchBest, touchSettings, markSeen, resetAll, onExternalChange, exportCode, importCode } from './store.js';
 import { sfx, buzz, ambient } from './sound.js';
 import { BoardView } from './render.js';
-import { actions, sameAction, preview, wisp, enemies, unitAt, clone, step, isEnemy } from './engine.js';
-import { newRun, playTurn, chooseBoon, BOONS, HOURS, HOUR_NAMES, MOONS } from './run.js';
+import { actions, sameAction, preview, wisp, enemies, unitAt, clone, step, isEnemy, breath, maxBreath, helpIn } from './engine.js';
+import { newRun, playTurn, chooseBoon, upgradeRun, BOONS, HOURS, HOUR_NAMES, MOONS } from './run.js';
 import { THEMES } from './gen.js';
 import { TRIALS, CHAPTERS, loadTrial } from './trials.js';
 import { sprite } from './sprites.js';
@@ -13,11 +13,11 @@ const $app = document.getElementById('app');
 const $sheets = document.getElementById('sheet-root');
 
 export const INFO = {
-  wisp: ['You, the wisp', 'Drift to a cell next to you, or swap places with the first thing in any of the 8 lines. You float over bog.'],
+  wisp: ['You, the wisp', 'Drift to a cell next to you, or swap places with the first thing in any of the 8 lines. A swap uses your breath; drift or wait to get it back. If the swap sinks a hunter in the bog, you keep it. You float over bog.'],
   fork: ['Peasant', 'Strikes the cell next to him. Walks one cell each turn.'],
   bow: ['Hunter', 'Shoots along a line. The bolt hits the first thing in its way. Reloads after each shot.'],
   hound: ['Hound', 'Runs two cells each turn. Charges in a line until it hits something. If it charges into bog, it sinks.'],
-  flask: ['Alchemist', 'Throws a flask at your cell. It bursts in a plus shape. Brews a new flask after each throw.'],
+  flask: ['Alchemist', 'Throws a flask onto empty ground next to you. It bursts in a plus shape. Brews a new flask after each throw.'],
   knight: ['Knight', 'Two hearts. Swings at the cell in front of him and the two cells beside it. In bog, his armour sinks him at once.'],
   priest: ['Priest', 'Sends holy light along a whole line. It goes through everyone. Prays after each beam.'],
   witch: ['Witch', 'Flies, so bog cannot sink her. Strikes a diagonal cell. Moves two cells.'],
@@ -33,9 +33,10 @@ const ICONS = {
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   heart: '<svg viewBox="0 0 32 32"><path d="M16 27C8 21 4 16.5 4 11.5 4 8 6.7 5.5 10 5.5c2.4 0 4.6 1.4 6 3.5 1.4-2.1 3.6-3.5 6-3.5 3.3 0 6 2.5 6 6 0 5-4 9.5-12 15.5z" fill="#ff8f7f"/></svg>',
   dew: '<svg viewBox="0 0 32 32"><path d="M16 4C12 11 8 15 8 20a8 8 0 0016 0c0-5-4-9-8-16z" fill="#8fe7ff"/><circle cx="13" cy="20" r="2.4" fill="#fff" opacity=".8"/></svg>',
-  drift: '<svg viewBox="0 0 32 32" fill="none" stroke="#a6f2ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="16" r="2.5" fill="#a6f2ff"/><path d="M11 11L6 6M21 11l5-5M11 21l-5 5M21 21l5 5M6 11V6h5M26 11V6h-5M6 21v5h5M26 21v5h-5"/></svg>',
   reach: '<svg viewBox="0 0 32 32" fill="none" stroke="#a6f2ff" stroke-width="2.6" stroke-linecap="round"><path d="M4 16h24M22 10l6 6-6 6"/><circle cx="12" cy="16" r="3" fill="#a6f2ff"/><circle cx="20" cy="16" r="3" fill="none"/></svg>',
   breath: '<svg viewBox="0 0 32 32" fill="none" stroke="#a6f2ff" stroke-width="2.4"><circle cx="11" cy="20" r="5"/><circle cx="21" cy="12" r="4"/><circle cx="22" cy="23" r="2.5"/></svg>',
+  wind: '<svg viewBox="0 0 32 32" fill="none" stroke="#a6f2ff" stroke-width="2.4" stroke-linecap="round"><path d="M16 16a3 3 0 113 3 6 6 0 01-6-6 9 9 0 019-9M16 16a3 3 0 10-3-3 6 6 0 016 6 9 9 0 01-9 9"/></svg>',
+  lure: '<svg viewBox="0 0 32 32" fill="none" stroke="#ffd08a" stroke-width="2.4" stroke-linecap="round"><circle cx="22" cy="10" r="3.5" fill="#ffe7b0" stroke="none"/><path d="M4 26c5-2 7-8 11-10s6-3 6-3" stroke-dasharray="2.5 3.5"/><path d="M3 22l3 5 5-2"/></svg>',
   veil: '<svg viewBox="0 0 32 32" fill="none" stroke="#cfe0ff" stroke-width="2.4" stroke-linecap="round"><path d="M5 11c4-3 8 3 12 0s7-3 10 0M5 17c4-3 8 3 12 0s7-3 10 0M5 23c4-3 8 3 12 0s7-3 10 0"/></svg>',
   gust: '<svg viewBox="0 0 32 32" fill="none" stroke="#e2f6ff" stroke-width="2.6" stroke-linecap="round"><path d="M4 12h15a4 4 0 10-4-4M4 18h20a4 4 0 11-4 4M4 24h9"/></svg>',
   mire: '<svg viewBox="0 0 32 32" fill="none" stroke="#6fc3d4" stroke-width="2.6" stroke-linecap="round"><path d="M4 14c3-3 5 3 8 0s5-3 8 0 5 3 8 0M4 21c3-3 5 3 8 0s5-3 8 0 5 3 8 0"/></svg>',
@@ -137,6 +138,12 @@ function today() {
 function heartsRow(hp, mhp) {
   const row = el('div', { class: 'hearts', 'aria-label': `${hp} of ${mhp} hearts` });
   for (let i = 0; i < mhp; i++) row.append(el('i', { class: `heart${i < hp ? '' : ' off'}` }));
+  return row;
+}
+
+function breathRow(br, mbr) {
+  const row = el('div', { class: 'breath', 'aria-label': `${br} of ${mbr} breaths` });
+  for (let i = 0; i < mbr; i++) row.append(el('i', { class: i < br ? '' : 'off' }));
   return row;
 }
 
@@ -349,7 +356,7 @@ function Play(opts) {
     trial = { s: loadTrial(tdef), turns: 0, failed: null };
     for (const u of trial.s.u) if (u.k !== 'wisp') markSeen(`kind:${u.k}`);
   } else {
-    run = loadRun(opts.slot);
+    run = upgradeRun(loadRun(opts.slot));
     if (!run) return go(Home);
   }
   const S = () => (isTrial ? trial.s : run.state);
@@ -410,11 +417,15 @@ function Play(opts) {
     }
     if (isTrial && trial.failed) return setInfo('wisp', trial.failed, 'Tap <b>Undo</b> or <b>Restart</b>.');
     if (mode === 'mire') return setInfo(null, 'Mire', 'Tap an empty cell next to you to turn it into bog.');
+    if (mode === 'lure') return setInfo(null, 'Lure', 'Tap a hunter in a straight line, two or more cells away. He walks to your light.');
     const threatened = view.intents(s).some(({ cells }) => cells.some(([x, y]) => x === p.x && y === p.y));
-    if (p.cd > 0)
-      return setInfo('wisp', threatened ? 'Out of breath, and in danger' : 'Catching your breath', `You swapped last turn, so you can only <b>drift</b> or <b>wait</b>.${threatened ? ' Your cell is red: drift to a safe cell.' : ''}`);
-    if (threatened) return setInfo('wisp', 'You are in danger', 'Red cells will be hit after your move. Drift away, or swap so a hunter takes your place.');
-    setInfo('wisp', 'Your move', 'Drift to a cell next to you, or swap with something in a straight line. Tap any hunter to see what it does.');
+    if (breath(s) <= 0)
+      return setInfo('wisp', threatened ? 'Out of breath, and in danger' : 'Out of breath', `You cannot swap now. <b>Drift</b> or <b>wait</b> to catch your breath.${threatened ? ' Your cell is red: drift to a safe cell.' : ''}`);
+    if (threatened) return setInfo('wisp', 'You are in danger', 'Red cells will be hit after your move. The hunters also guard the cells around you. Find the gap, or swap.');
+    if (s.coming) return setInfo(s.coming.k, 'Help is coming', `The lantern at the edge: a ${INFO[s.coming.k][0].toLowerCase()} steps out of the dark there after your move.`);
+    const calm = helpIn(s);
+    if (calm && calm <= 2) return setInfo('wisp', 'They grow restless', `If no hunter falls in ${calm} turn${calm === 1 ? '' : 's'}, they call for help.`);
+    setInfo('wisp', 'Your move', 'Drift, or swap with something in a straight line. A swap uses your breath. Sink a hunter with it, and you keep it.');
   }
 
   function hud_() {
@@ -423,12 +434,13 @@ function Play(opts) {
     if (isTrial) {
       hourEl.textContent = tdef.name;
       subEl.textContent = `Trial ${tdef.label} · turn ${Math.min(trial.turns + 1, tdef.turns)} of ${tdef.turns}`;
-      heartsEl.replaceChildren();
+      heartsEl.replaceChildren(el('div', { class: 'vitals' }, breathRow(breath(s), maxBreath(s))));
       scoreEl.textContent = '';
     } else {
       hourEl.textContent = HOUR_NAMES[run.depth - 1];
-      subEl.textContent = `${run.daily ? "Tonight's hunt · " : ''}Hour ${run.depth} of ${HOURS} · ${THEMES[s.theme]?.name || 'Marsh'} · ${enemies(s).length} left`;
-      heartsEl.replaceChildren(heartsRow(p.hp, p.mhp || run.mhp));
+      const help = s.coming ? 'help is coming' : helpIn(s) ? `help in ${helpIn(s)}` : THEMES[s.theme]?.name || 'Marsh';
+      subEl.textContent = `${run.daily ? "Tonight's hunt · " : ''}Hour ${run.depth}/${HOURS} · ${enemies(s).length} left · ${help}`;
+      heartsEl.replaceChildren(el('div', { class: 'vitals' }, breathRow(breath(s), maxBreath(s)), heartsRow(p.hp, p.mhp || run.mhp)));
       scoreEl.textContent = `${fmt(run.score)} lights`;
     }
     buildBar();
@@ -441,19 +453,24 @@ function Play(opts) {
     if (!isTrial) {
       const ch = s.charges || {};
       if (run.boons.gust) bar.append(el('button', { class: 'btn', disabled: !ch.gust, onclick: () => tapAction({ type: 'gust' }), html: `${ICONS.gust.replace('<svg', '<svg width="22" height="22"')} Gust` }));
-      if (run.boons.mire)
+      for (const [key, label] of [
+        ['mire', 'Mire'],
+        ['lure', 'Lure'],
+      ]) {
+        if (!run.boons[key]) continue;
         bar.append(
           el('button', {
-            class: `btn${mode === 'mire' ? ' primary' : ''}`,
-            disabled: !ch.mire,
+            class: `btn${mode === key ? ' primary' : ''}`,
+            disabled: !ch[key],
             onclick: () => {
-              mode = mode === 'mire' ? null : 'mire';
+              mode = mode === key ? null : key;
               sel = null;
               refresh();
             },
-            html: `${ICONS.mire.replace('<svg', '<svg width="22" height="22"')} Mire`,
+            html: `${ICONS[key].replace('<svg', '<svg width="22" height="22"')} ${label}`,
           }),
         );
+      }
     } else {
       bar.append(el('button', { class: 'btn', disabled: !history.length, onclick: undo, html: `${ICONS.undo.replace('<svg', '<svg width="20" height="20"')} Undo` }));
       bar.append(el('button', { class: 'btn', onclick: restart, html: `${ICONS.restart.replace('<svg', '<svg width="20" height="20"')} Restart` }));
@@ -463,14 +480,11 @@ function Play(opts) {
   function refresh() {
     const s = S();
     const acts = trial?.failed ? [] : actions(s);
-    const steps = acts.filter((a) => a.type === 'step').map((a) => [a.x, a.y]);
-    const swaps = acts.filter((a) => a.type === 'swap').map((a) => [a.x, a.y]);
-    const mires = acts.filter((a) => a.type === 'mire').map((a) => [a.x, a.y]);
+    const cells = (type) => acts.filter((a) => a.type === type).map((a) => [a.x, a.y]);
     const o = {};
-    if (db.settings.hints || mode === 'mire') {
-      o.steps = mode === 'mire' ? mires : steps;
-      o.swaps = mode === 'mire' ? [] : swaps;
-    }
+    if (mode === 'mire') Object.assign(o, { steps: cells('mire'), swaps: [] });
+    else if (mode === 'lure') Object.assign(o, { steps: [], swaps: cells('lure') });
+    else if (db.settings.hints) Object.assign(o, { steps: cells('step'), swaps: cells('swap') });
     if (sel) {
       o.sel = sel.cell;
       o.preview = sel.pv;
@@ -490,7 +504,7 @@ function Play(opts) {
     for (const id of pv.hurtE) parts.push(`The ${INFO[s.u.find((u) => u.id === id).k][0]} is wounded.`);
     if (pv.hurt > 0) parts.push(`<span class="bad">You get hit (−${pv.hurt}).</span>`);
     else parts.push('<span class="good">You stay safe.</span>');
-    if (a.type === 'swap') parts.push('Then you rest a turn.');
+    if (a.type === 'swap') parts.push(pv.breath >= breath(s) ? 'The bog takes him, so you keep your breath.' : pv.breath > 0 ? 'Uses a breath.' : 'Uses your breath.');
     parts.push(db.settings.confirm ? 'Tap again to confirm.' : '');
     return parts.join(' ');
   }
@@ -502,6 +516,7 @@ function Play(opts) {
     if (a.type === 'gust') return 'Gust';
     if (a.type === 'mire') return 'Mire';
     const u = s.u.find((q) => q.id === a.id);
+    if (a.type === 'lure') return `Lure the ${INFO[u.k][0]}`;
     return `Swap with the ${INFO[u.k][0]}`;
   }
 
@@ -533,8 +548,9 @@ function Play(opts) {
     const s = S();
     const [x, y] = cell;
     const p = wisp(s);
-    if (mode === 'mire') {
-      if (actions(s).some((a) => a.type === 'mire' && a.x === x && a.y === y)) tapAction({ type: 'mire', x, y });
+    if (mode) {
+      const m = actions(s).find((a) => a.type === mode && a.x === x && a.y === y);
+      if (m) tapAction(m);
       else {
         mode = null;
         sel = null;
@@ -551,12 +567,18 @@ function Play(opts) {
     const u = unitAt(s, x, y);
     sel = null;
     refresh();
+    if (!u && s.coming && s.coming.x === x && s.coming.y === y) {
+      const k = s.coming.k;
+      setInfo(k, `${INFO[k][0]}, coming`, `${INFO[k][1]} <b>Steps out of the dark here after your move.</b>`);
+      sfx('tap');
+      return;
+    }
     if (u) {
       const [n, d] = INFO[u.k];
       let extra = '';
       if (u.rest && !u.it) extra = ' <b>Resting this turn.</b>';
       if (isEnemy(u) && u.hp > 1) extra += ` <b>${u.hp} hearts left.</b>`;
-      if (p.cd === 0 && !sw) extra += ' Not in a clear line from you.';
+      if (breath(s) > 0 && !sw) extra += ' Not in a clear line from you.';
       setInfo(u.k, n, d + extra);
       view.setOverlay({ ...view.overlay, focus: [x, y] });
       sfx('tap');
@@ -582,6 +604,7 @@ function Play(opts) {
     mode = null;
     view.setOverlay({});
     const s = S();
+    const breathBefore = breath(s);
     let res;
     if (isTrial) {
       history.push(clone(trial));
@@ -593,12 +616,18 @@ function Play(opts) {
       else saveRun(opts.slot, run);
     }
     const killsNow = res.ev.filter((e) => (e.t === 'die' || e.t === 'sink') && e.id !== 0).length;
+    const breathBack = a.type === 'swap' && breath(S()) >= breathBefore;
     const final = clone(S());
     buildBar();
     setInfo(null, '', '');
     await view.play(res.ev, final, {
       haptics: db.settings.haptics,
       afterAttacks: async () => {
+        if (breathBack) {
+          const p = wisp(final);
+          view.burst(p.x + 0.8, p.y + 0.4, 9, '#e6fbff', 0.9, 700, 0.045);
+          sfx('breath');
+        }
         if (killsNow >= 2) {
           sfx('combo', killsNow);
           const p = wisp(final);
@@ -793,7 +822,6 @@ function Play(opts) {
 
   function afterTrialTurn(res) {
     const s = trial.s;
-    const p = wisp(s);
     if (res.ev.some((e) => e.t === 'hurt')) {
       trial.failed = 'You were hit';
       sfx('lost');
@@ -808,7 +836,6 @@ function Play(opts) {
       trial.failed = `Out of turns`;
       sfx('lost');
     }
-    void p;
     refresh();
   }
 
@@ -1124,7 +1151,10 @@ function almanac() {
         el('li', { html: 'Each turn, <b>drift</b> one cell (up, down, left, right), or <b>swap</b> places with the first thing in any of the 8 straight lines.' }),
         el('li', { html: 'A swapped hunter <b>keeps aiming the same way</b>. Put him where the others strike, or turn his attack onto them.' }),
         el('li', { html: 'You <b>float over bog</b>. Hunters do not. Swap a hunter onto bog and he sinks.' }),
-        el('li', { html: 'After a swap you <b>rest one turn</b>: you can only drift or wait.' }),
+        el('li', { html: 'A swap uses your <b>breath</b>. Drift or wait one turn to get it back.' }),
+        el('li', { html: 'If your swap <b>sinks a hunter</b> in the bog, you keep your breath and can swap again at once.' }),
+        el('li', { html: 'Hunters <b>hunt as a pack</b>. When one aims at you, the others guard the cells around you.' }),
+        el('li', { html: 'If no hunter falls for five turns, they <b>call for help</b>. A lantern shows where the next one comes out of the dark.' }),
         el('li', { html: '<b>Marsh gas</b> bursts when hit and hurts all 8 cells around it.' }),
         el('li', { html: 'When <b>one hunter</b> is left, he runs away and the hour ends.' }),
         el('li', { html: 'Survive <b>nine hours</b>, from 9 PM until dawn. Between hours, choose a gift.' }),
@@ -1132,6 +1162,7 @@ function almanac() {
       el('h3', {}, 'Tips'),
       el('p', { html: 'Tap a cell once to see what will happen. Tap it again to do it. Skulls show who falls. A red number shows the hits you take.' }),
       el('p', { html: 'Two hunters who aim at you from opposite sides are a gift: swap with one, and they strike each other.' }),
+      el('p', { html: 'Before you swap, look at where you land. Out of breath, you can only drift, and the pack closes in.' }),
       el('h3', {}, 'Who walks the marsh'),
     );
     const list = el('div', { class: 'bestiary' });

@@ -29,11 +29,11 @@ const TUTORIAL = [
     map: ['.....', '.....', '.f@f.', '.....', '.....'],
   },
   {
-    name: 'Catch Your Breath',
-    turns: 3,
-    text: 'After a swap you must rest one turn: you can only drift. Sink both peasants in <b>3 turns</b>.',
-    after: 'Swap, drift, swap. That is the rhythm of the marsh.',
-    map: ['......', '...f..', '..~~..', '..~&.f', '......', '......'],
+    name: 'Breath',
+    turns: 2,
+    text: 'A swap uses your <b>breath</b> (the bubble at the top). Drift or wait to get it back. But if the swap <b>sinks a hunter</b>, you keep it. Clear the marsh in <b>2 turns</b>.',
+    after: 'The bog gives you breath. Sink a hunter, and you can swap again at once.',
+    map: ['.....', '.....', '.fb.f', '.~.&.', '.~...', '.....'],
   },
   {
     name: 'Bolts',
@@ -74,7 +74,7 @@ export function loadTrial(def) {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const c = rows[y][x];
-      if (c === '@' || c === '&') addUnit(s, 'wisp', x, y, { hp: 3, mhp: 3, d: 0 });
+      if (c === '@' || c === '&') addUnit(s, 'wisp', x, y, { hp: 3, mhp: 3, d: 0, ...(def.br != null ? { br: def.br } : {}) });
     }
   }
   for (let y = 0; y < h; y++) {

@@ -278,6 +278,17 @@ body.playing .moon { opacity: 0; transition: opacity 0.4s; }
 .heart.lost { animation: heart-lost 0.6s ease; }
 @keyframes heart-lost { 0% { transform: rotate(-45deg) scale(1.6); background: #ff8070; } 100% { transform: rotate(-45deg) scale(1); } }
 
+.vitals { display: flex; align-items: center; gap: 10px; }
+.breath { display: flex; gap: 3px; }
+.breath i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff 0 25%, #dff8ff 35%, #a9dcef);
+  box-shadow: 0 0 6px rgba(220, 250, 255, 0.6);
+}
+.breath i.off { background: none; border: 1.5px solid rgba(150, 190, 210, 0.5); box-shadow: none; }
+
 .score { font-weight: 900; font-size: 15px; color: var(--amber); font-variant-numeric: tabular-nums; }
 .score.bump { animation: bump 0.4s ease; }
 @keyframes bump { 50% { transform: scale(1.25); } }

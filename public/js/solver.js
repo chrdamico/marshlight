@@ -2,7 +2,7 @@ import { actions, clone, step, enemies, wisp } from './engine.js';
 
 function key(s) {
   let k = s.t.join('');
-  for (const u of s.u) k += `|${u.id},${u.x},${u.y},${u.hp},${u.cd},${u.it ? u.it.type + (u.it.d ?? '') + (u.it.x ?? '') + (u.it.y ?? '') : '-'}`;
+  for (const u of s.u) k += `|${u.id},${u.x},${u.y},${u.hp},${u.cd},${u.br ?? ''},${u.it ? u.it.type + (u.it.d ?? '') + (u.it.x ?? '') + (u.it.y ?? '') : '-'}`;
   return k;
 }
 

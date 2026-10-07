@@ -85,6 +85,7 @@ function randomPuzzle(rng, cfg) {
     addUnit(s, 'gas', x, y);
   }
   for (const e of enemies(s)) if (e.k !== 'fork' && e.k !== 'knight' && e.k !== 'witch' && rng() < 0.15) e.cd = 1;
+  if (rng() < 0.2) wisp(s).br = 0;
   s.rules = { rout: false };
   s.party = enemies(s).length;
   aimInPlace(s);
@@ -151,10 +152,11 @@ if (!isMainThread) {
     if (!raw) continue;
     const map = toMap(raw);
     const rest = enemies(raw).filter((e) => e.rest).map((e) => [e.x, e.y]);
-    const s = loadTrial({ map, rest });
+    const br = wisp(raw).br;
+    const s = loadTrial({ map, rest, br });
     const ev = evaluate(s, cfg);
     if (!ev) continue;
-    out.push({ map, rest, turns: ev.m, ...ev });
+    out.push({ map, rest, br, turns: ev.m, ...ev });
   }
   parentPort.postMessage(out);
 }
@@ -210,8 +212,8 @@ if (isMainThread && process.argv[1] === fileURLToPath(import.meta.url)) {
     if (process.argv[4] === 'dump') writeFileSync(`.cands-${cfg.chapter}.json`, JSON.stringify(cands));
     const chosen = pick(cands, cfg.want);
     console.log(`chapter ${cfg.chapter}: ${cands.length} candidates in ${((Date.now() - t0) / 1000).toFixed(1)}s, chose ${chosen.length}`);
-    for (const c of chosen) console.log(`  turns ${c.turns} sols ${c.sols} firsts ${c.firsts} safe ${c.safe} diff ${c.diff.toFixed(1)} kinds ${c.kinds.join(',')}  ${c.map.join('/')}`);
-    chosen.forEach((c, i) => all.push({ chapter: cfg.chapter, n: i + 1, name: nameFor(cfg.chapter, i), turns: c.turns, map: c.map, rest: c.rest.length ? c.rest : undefined, sol: c.sol }));
+    for (const c of chosen) console.log(`  turns ${c.turns} sols ${c.sols} firsts ${c.firsts} safe ${c.safe} diff ${c.diff.toFixed(1)} br ${c.br ?? 1} kinds ${c.kinds.join(',')}  ${c.map.join('/')}`);
+    chosen.forEach((c, i) => all.push({ chapter: cfg.chapter, n: i + 1, name: nameFor(cfg.chapter, i), turns: c.turns, map: c.map, rest: c.rest.length ? c.rest : undefined, br: c.br ?? undefined, sol: c.sol }));
   }
   if (only == null) {
     writeFileSync(new URL('../public/js/trials-data.js', import.meta.url), `export const GENERATED = ${JSON.stringify(all)};\n`);

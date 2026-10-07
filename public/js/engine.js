@@ -1,3 +1,5 @@
+import { mulberry32 } from './rng.js';
+
 export const DIRS = [
   [0, -1],
   [1, -1],
@@ -61,8 +63,10 @@ export function addUnit(s, k, x, y, extra = {}) {
   return u;
 }
 
-export const RULES = { swapCd: 1, step: 4, swapRange: 99, rout: true };
+export const RULES = { breath: 1, refund: 'sink', help: 5, step: 4, swapRange: 99, rout: true };
 const rule = (s, k) => (s.rules && s.rules[k] != null ? s.rules[k] : RULES[k]);
+export const maxBreath = (s) => rule(s, 'breath');
+export const breath = (s) => wisp(s).br ?? maxBreath(s);
 
 export function actions(s) {
   const p = wisp(s);
@@ -84,7 +88,15 @@ export function actions(s) {
       if (inb(s, x, y) && terr(s, x, y) === GROUND && !unitAt(s, x, y)) out.push({ type: 'mire', x, y });
     }
   }
-  if (p.cd > 0) return out;
+  if (ch.lure > 0) {
+    for (let d = 0; d < 8; d++) {
+      const first = lineCells(s, p.x, p.y, d).find(([x, y]) => unitAt(s, x, y));
+      if (!first) continue;
+      const u = unitAt(s, first[0], first[1]);
+      if (isEnemy(u) && Math.max(Math.abs(u.x - p.x), Math.abs(u.y - p.y)) >= 2) out.push({ type: 'lure', id: u.id, x: u.x, y: u.y });
+    }
+  }
+  if (breath(s) <= 0) return out;
   const range = rule(s, 'swapRange');
   const reach = rule(s, 'reach') ? 2 : 1;
   for (let d = 0; d < 8; d++) {
@@ -127,7 +139,7 @@ export function applyPlayer(s, a, ev) {
     ev.push({ t: 'swap', a: p.id, b: o.id, pa: [p.x, p.y], pb: [o.x, o.y] });
     [p.x, p.y, o.x, o.y] = [o.x, o.y, p.x, p.y];
     s.stats.swaps++;
-    p.cd = rule(s, 'swapCd') + 1;
+    p.br = breath(s) - 1;
     sinkIfBog(s, o, ev);
   } else if (a.type === 'gust') {
     s.charges.gust--;
@@ -148,6 +160,22 @@ export function applyPlayer(s, a, ev) {
       u.y = to[1];
     }
     for (const { u, to } of pushes) if (to) sinkIfBog(s, u, ev);
+  } else if (a.type === 'lure') {
+    s.charges.lure--;
+    const u = byId(s, a.id);
+    const d = dirTo(u.x, u.y, p.x, p.y);
+    const path = [[u.x, u.y]];
+    for (const [x, y] of lineCells(s, u.x, u.y, d)) {
+      if (unitAt(s, x, y)) break;
+      path.push([x, y]);
+      if (terr(s, x, y) === BOG) break;
+    }
+    ev.push({ t: 'lure', id: p.id, to: u.id });
+    if (path.length > 1) {
+      ev.push({ t: 'move', id: u.id, path, push: true });
+      [u.x, u.y] = path[path.length - 1];
+      sinkIfBog(s, u, ev);
+    }
   } else if (a.type === 'mire') {
     s.charges.mire--;
     s.t[a.y * s.w + a.x] = BOG;
@@ -286,6 +314,7 @@ export function resolveAttacks(s, ev) {
     if (u.k === 'wisp') {
       s.stats.hurt += Math.min(n, u.hp + n);
       ev.push({ t: 'hurt', id, n });
+      if (rule(s, 'secondWind')) u.br = maxBreath(s);
     }
     if (u.hp <= 0) {
       u.hp = 0;
@@ -384,21 +413,63 @@ function attackFrom(s, e, x, y, p) {
       return aligned && clearBetween(s, x, y, p.x, p.y, { noUnits: true, noBog: true }) ? { type: 'charge', d: dirTo(x, y, p.x, p.y) } : null;
     case 'flask': {
       const cheb = Math.max(ax, ay);
-      return cheb >= 2 && cheb <= 4 ? { type: 'throw', x: p.x, y: p.y } : null;
+      return cheb >= 2 && cheb <= 4 && !unitAt(s, p.x, p.y) ? { type: 'throw', x: p.x, y: p.y } : null;
     }
   }
   return null;
 }
 
-function crossfire(s, e, it, p) {
+const WISP_W = 12;
+const ESCAPE_W = 7;
+
+function huntTargets(s, p) {
+  const t = new Map([[p.y * s.w + p.x, WISP_W]]);
+  for (const d of ORTH) {
+    const x = p.x + DIRS[d][0];
+    const y = p.y + DIRS[d][1];
+    if (inb(s, x, y) && terr(s, x, y) !== ROCK && !unitAt(s, x, y)) t.set(y * s.w + x, ESCAPE_W);
+  }
+  return t;
+}
+
+function landingCells(s, p) {
+  const out = [];
+  for (const [dx, dy] of DIRS) {
+    const x = p.x + dx;
+    const y = p.y + dy;
+    if (inb(s, x, y) && terr(s, x, y) !== ROCK && !unitAt(s, x, y)) out.push({ x, y });
+  }
+  return out;
+}
+
+function attackOptions(s, e, x, y, p, targets) {
+  if (e.k === 'flask') return landingCells(s, p).map((c) => attackFrom(s, e, x, y, c)).filter(Boolean);
+  const out = [];
+  const seen = new Set();
+  for (const k of targets.keys()) {
+    const it = attackFrom(s, e, x, y, { x: k % s.w, y: Math.floor(k / s.w) });
+    if (!it || seen.has(it.type + it.d)) continue;
+    seen.add(it.type + it.d);
+    out.push(it);
+  }
+  return out;
+}
+
+function cellsAt(s, e, x, y, it) {
+  const [ox, oy, oit] = [e.x, e.y, e.it];
+  [e.x, e.y, e.it] = [x, y, it];
+  const cells = intentCells(s, e);
+  [e.x, e.y, e.it] = [ox, oy, oit];
+  return cells;
+}
+
+function crossfire(s, e, x, y, it, cells) {
   const ally = (u) => u && u !== e && isEnemy(u);
-  if (it.type === 'throw') return blastCells(s, it.x, it.y).filter(([cx, cy]) => ally(unitAt(s, cx, cy))).length;
-  if (it.type === 'strike') return 0;
-  if (it.type === 'cleave') return cleaveCells(s, e.x, e.y, it.d).filter(([cx, cy]) => ally(unitAt(s, cx, cy))).length;
+  if (it.type !== 'shoot' && it.type !== 'beam' && it.type !== 'charge') return cells.filter(([cx, cy]) => ally(unitAt(s, cx, cy))).length;
   let n = 0;
-  for (const [cx, cy] of lineCells(s, p.x, p.y, it.d)) {
+  for (const [cx, cy] of lineCells(s, x, y, it.d)) {
     const u = unitAt(s, cx, cy);
-    if (!u || u === e) continue;
+    if (!u || u === e || u.k === 'wisp') continue;
     if (ally(u)) n++;
     if (it.type !== 'beam') break;
   }
@@ -417,31 +488,46 @@ function idealRange(e) {
   return e.k === 'bow' || e.k === 'priest' ? 3 : e.k === 'flask' ? 3 : 1;
 }
 
+function chooseAttack(s, e, reach, p, targets, covered) {
+  let best = null;
+  for (const [x, y, dd] of reach) {
+    const danger = threatened(s, x, y) ? 50 : 0;
+    const range = Math.abs(Math.abs(p.x - x) + Math.abs(p.y - y) - idealRange(e));
+    for (const it of attackOptions(s, e, x, y, p, targets)) {
+      const cells = cellsAt(s, e, x, y, it);
+      let value = 0;
+      for (const [cx, cy] of cells) {
+        const k = cy * s.w + cx;
+        const w = targets.get(k);
+        if (w) value += covered.has(k) ? (w === WISP_W ? 2 : 1) : w;
+      }
+      if (!value) continue;
+      const score = -value * 10 + dd * 4 + danger + crossfire(s, e, x, y, it, cells) * 80 + range;
+      if (!best || score < best.score) best = { x, y, it, score, cells };
+    }
+  }
+  return best;
+}
+
 export function plan(s, ev = []) {
   const p = wisp(s);
+  const targets = huntTargets(s, p);
+  const covered = new Set();
   const order = enemies(s).sort((a, b) => Math.abs(a.x - p.x) + Math.abs(a.y - p.y) - (Math.abs(b.x - p.x) + Math.abs(b.y - p.y)) || a.id - b.id);
   for (const e of order) {
-    const { dist, pathTo, key } = bfs(s, e);
+    const { dist, pathTo } = bfs(s, e);
     const move = KINDS[e.k].move;
     const reach = [];
     for (const [k, dd] of dist) if (dd <= move) reach.push([k % s.w, Math.floor(k / s.w), dd]);
     const resting = e.cd > 0;
     e.rest = resting;
-    let best = null;
-    if (!resting) {
-      for (const [x, y, dd] of reach) {
-        const it = attackFrom(s, e, x, y, p);
-        if (!it) continue;
-        const score = dd * 10 + (threatened(s, x, y) ? 50 : 0) + crossfire(s, e, it, p) * 25 + Math.abs(Math.abs(p.x - x) + Math.abs(p.y - y) - idealRange(e));
-        if (!best || score < best.score) best = { x, y, it, score };
-      }
-    }
+    let best = resting ? null : chooseAttack(s, e, reach, p, targets, covered);
     if (!best) {
       let goal = null;
       for (const [k, dd] of dist) {
         const x = k % s.w;
         const y = Math.floor(k / s.w);
-        if (!attackFrom(s, e, x, y, p)) continue;
+        if (!attackFrom(s, e, x, y, p) && !(e.k === 'flask' && Math.max(Math.abs(p.x - x), Math.abs(p.y - y)) <= 4)) continue;
         const score = dd * 10 + Math.abs(Math.abs(p.x - x) + Math.abs(p.y - y) - idealRange(e));
         if (!goal || score < goal.score) goal = { x, y, score, dd };
       }
@@ -470,7 +556,10 @@ export function plan(s, ev = []) {
     e.it = best.it;
     if (e.it && e.it.d != null) e.d = e.it.d;
     else if (e.it) e.d = dirTo(e.x, e.y, e.it.x, e.it.y);
-    if (e.it) ev.push({ t: 'aim', id: e.id });
+    if (e.it) {
+      ev.push({ t: 'aim', id: e.id });
+      for (const [cx, cy] of intentCells(s, e)) covered.add(cy * s.w + cx);
+    }
   }
   return ev;
 }
@@ -500,25 +589,77 @@ function rout(s, ev) {
   s.u = s.u.filter((u) => !fleeing.includes(u));
 }
 
+function catchBreath(s, a, ev) {
+  const refund = rule(s, 'refund');
+  const fell = ev.some((e) => e.t === 'sink' || (e.t === 'die' && refund !== 'sink'));
+  if (a.type !== 'swap' || (refund && fell)) wisp(s).br = Math.min(maxBreath(s), breath(s) + 1);
+}
+
+function edgeCell(s, rng) {
+  const p = wisp(s);
+  const free = (x, y) => terr(s, x, y) === GROUND && !unitAt(s, x, y);
+  const cells = [];
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if ((x === 0 || y === 0 || x === s.w - 1 || y === s.h - 1) && free(x, y)) cells.push([x, y]);
+  const far = cells.filter(([x, y]) => Math.abs(x - p.x) + Math.abs(y - p.y) >= 4);
+  const pool = far.length ? far : cells;
+  return pool.length ? pool[Math.floor(rng() * pool.length)] : null;
+}
+
+export const helpIn = (s) => (rule(s, 'help') && s.helpPool && !s.coming ? Math.max(1, rule(s, 'help') - (s.calm || 0)) : 0);
+
+function arrive(s, ev) {
+  const c = s.coming;
+  if (!c) return;
+  s.coming = null;
+  let [x, y] = [c.x, c.y];
+  if (terr(s, x, y) !== GROUND || unitAt(s, x, y)) {
+    const alt = edgeCell(s, mulberry32(s.helpSeed + s.turn * 31));
+    if (!alt) return;
+    [x, y] = alt;
+  }
+  const u = addUnit(s, c.k, x, y, { d: 4 });
+  s.party++;
+  ev.push({ t: 'arrive', id: u.id, k: u.k, x, y });
+}
+
+function callHelp(s, ev, fell) {
+  s.calm = fell ? 0 : (s.calm || 0) + 1;
+  const n = rule(s, 'help');
+  if (!n || !s.helpPool || s.coming || s.calm < n) return;
+  const rng = mulberry32(s.helpSeed + s.turn * 7919);
+  const cell = edgeCell(s, rng);
+  if (!cell) return;
+  s.coming = { k: s.helpPool[Math.floor(rng() * s.helpPool.length)], x: cell[0], y: cell[1] };
+  s.calm = 0;
+  ev.push({ t: 'call', x: cell[0], y: cell[1] });
+}
+
 export function step(s, a) {
   const ev = [];
   applyPlayer(s, a, ev);
   resolveAttacks(s, ev);
   s.turn++;
   const p = wisp(s);
-  if (p.cd > 0) p.cd--;
-  if (rule(s, 'bogBreath') && ev.some((e) => e.t === 'sink')) p.cd = 0;
+  catchBreath(s, a, ev);
+  const fell = ev.some((e) => e.t === 'die' || e.t === 'sink');
   if (p.hp > 0) rout(s, ev);
   const o = outcome(s);
-  if (!o) plan(s, ev);
+  if (!o) {
+    arrive(s, ev);
+    plan(s, ev);
+    callHelp(s, ev, fell);
+  }
   return { ev, outcome: o };
 }
 
 export function preview(s, a) {
   const moved = clone(s);
-  applyPlayer(moved, a, []);
+  const ev = [];
+  applyPlayer(moved, a, ev);
   const after = clone(moved);
-  resolveAttacks(after, []);
+  resolveAttacks(after, ev);
+  catchBreath(after, a, ev);
+  wisp(moved).br = breath(after);
   const dies = [];
   const hurtE = [];
   for (const e of s.u) {
@@ -527,15 +668,20 @@ export function preview(s, a) {
     if (!z || z.hp <= 0) dies.push(e.id);
     else if (z.hp < e.hp) hurtE.push(e.id);
   }
-  return { state: moved, dies, hurtE, hurt: wisp(s).hp - wisp(after).hp };
+  return { state: moved, dies, hurtE, hurt: wisp(s).hp - wisp(after).hp, breath: breath(after) };
 }
 
 export function aimInPlace(s) {
   const p = wisp(s);
-  for (const e of enemies(s)) {
+  const targets = huntTargets(s, p);
+  const covered = new Set();
+  const order = enemies(s).sort((a, b) => Math.abs(a.x - p.x) + Math.abs(a.y - p.y) - (Math.abs(b.x - p.x) + Math.abs(b.y - p.y)) || a.id - b.id);
+  for (const e of order) {
     e.rest = e.cd > 0;
     e.cd = 0;
-    e.it = e.rest ? null : attackFrom(s, e, e.x, e.y, p);
+    e.it = e.rest ? null : chooseAttack(s, e, [[e.x, e.y, 0]], p, targets, covered)?.it || null;
     if (e.it && e.it.d != null) e.d = e.it.d;
+    else if (e.it) e.d = dirTo(e.x, e.y, e.it.x, e.it.y);
+    if (e.it) for (const [cx, cy] of intentCells(s, e)) covered.add(cy * s.w + cx);
   }
 }

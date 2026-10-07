@@ -1,5 +1,5 @@
 import { sprite, terrainCanvas } from './sprites.js';
-import { intentCells, DIRS, BOG, KINDS, isEnemy } from './engine.js';
+import { intentCells, DIRS, BOG, KINDS, isEnemy, maxBreath } from './engine.js';
 
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 const easeOut = (t) => 1 - (1 - t) ** 3;
@@ -75,6 +75,7 @@ export class BoardView {
       hp: u.hp,
       mhp: u.mhp || KINDS[u.k].hp,
       cd: u.cd,
+      br: u.br,
       rest: !!u.rest,
       it: u.it,
       flip: prev ? prev.flip : u.x > (this.state ? this.state.w / 2 : 3),
@@ -102,7 +103,7 @@ export class BoardView {
         this.units.set(u.id, this.toView(u));
         continue;
       }
-      Object.assign(v, { x: u.x, y: u.y, hp: u.hp, cd: u.cd, rest: !!u.rest, it: u.it, mhp: u.mhp || v.mhp, alpha: 1, dy: 0, ox: 0, oy: 0, sink: 0 });
+      Object.assign(v, { x: u.x, y: u.y, hp: u.hp, cd: u.cd, br: u.br, rest: !!u.rest, it: u.it, mhp: u.mhp || v.mhp, alpha: 1, dy: 0, ox: 0, oy: 0, sink: 0 });
       if (u.it) v.flip = this.faceLeft(u, v.flip);
     }
     for (const id of [...this.units.keys()]) if (!seen.has(id)) this.units.delete(id);
@@ -259,6 +260,7 @@ export class BoardView {
     const viewUnits = o.preview ? o.preview.state.u.map((u) => ({ ...this.toView(u, this.units.get(u.id)), flip: this.faceLeft(u, this.units.get(u.id)?.flip ?? false) })) : [...this.units.values()];
     this.drawLights(g, viewUnits, now);
     if (this.showIntents) this.drawThreatTiles(g, view, now);
+    if (view.coming) this.drawComing(g, view.coming, now);
     this.drawHints(g, now);
     const sorted = viewUnits.slice().sort((a, b) => a.y - b.y || (a.k === 'wisp') - (b.k === 'wisp'));
     for (const v of sorted) this.drawShadow(g, v, now);
@@ -316,7 +318,7 @@ export class BoardView {
       if (v.alpha <= 0.02) continue;
       const L = LIGHT[v.k] || LIGHT.default;
       let r = L.r;
-      if (v.k === 'wisp' && v.cd > 0) r *= 0.8;
+      if (v.k === 'wisp' && v.br === 0) r *= 0.8;
       out.push({ x: v.x + 0.5 + v.ox, y: v.y + 0.45 + v.oy, r, col: L.col, a: v.alpha, k: v.k });
     }
     return out;
@@ -475,6 +477,32 @@ export class BoardView {
       }
       g.restore();
     }
+  }
+
+  drawComing(g, c, now) {
+    const C = this.cell;
+    const cx = (c.x + 0.5) * C;
+    const cy = (c.y + 0.5) * C;
+    const pulse = 0.75 + Math.sin(now / 260) * 0.25;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    const grd = g.createRadialGradient(cx, cy, 0, cx, cy, C * 0.75);
+    grd.addColorStop(0, `rgba(255,190,90,${0.45 * pulse})`);
+    grd.addColorStop(1, 'rgba(255,150,60,0)');
+    g.fillStyle = grd;
+    g.fillRect(cx - C, cy - C, C * 2, C * 2);
+    g.restore();
+    g.save();
+    g.globalAlpha = 0.35 + pulse * 0.1;
+    this.drawSprite(g, cx, cy, { ...this.toView({ id: -1, k: c.k, x: c.x, y: c.y, hp: KINDS[c.k].hp }), flip: c.x > this.state.w / 2 }, now);
+    g.restore();
+    g.save();
+    g.strokeStyle = `rgba(255,200,120,${0.6 + pulse * 0.3})`;
+    g.lineWidth = Math.max(1.5, C * 0.04);
+    g.setLineDash([C * 0.1, C * 0.08]);
+    g.lineDashOffset = -now / 80;
+    g.strokeRect(c.x * C + C * 0.08, c.y * C + C * 0.08, C * 0.84, C * 0.84);
+    g.restore();
   }
 
   arrowHead(g, x, y, dx, dy, size, col) {
@@ -685,7 +713,7 @@ export class BoardView {
 
   drawWisp(g, cx, cy, v, now) {
     const C = this.cell;
-    const tired = v.cd > 0;
+    const tired = v.br === 0;
     const r = C * (tired ? 0.17 : 0.2);
     const bob = Math.sin(now / 520 + 1) * C * 0.04;
     const y = cy + bob - C * 0.05 + v.dy * C;
@@ -728,6 +756,24 @@ export class BoardView {
         g.beginPath();
         g.arc(px, cy + C * 0.4, C * 0.035, 0, Math.PI * 2);
         g.fill();
+      }
+    }
+    const mb = maxBreath(this.state);
+    const br = v.br ?? mb;
+    g.lineWidth = Math.max(1, C * 0.025);
+    for (let i = 0; i < mb; i++) {
+      const by = cy + C * 0.12 - i * C * 0.16 + Math.sin(now / 400 + i * 1.7) * C * 0.015;
+      const bx = cx + C * 0.36;
+      g.beginPath();
+      g.arc(bx, by, C * 0.06, 0, Math.PI * 2);
+      if (i < br) {
+        g.fillStyle = 'rgba(230,252,255,0.95)';
+        g.fill();
+        g.strokeStyle = 'rgba(20,50,70,0.6)';
+        g.stroke();
+      } else {
+        g.strokeStyle = 'rgba(170,205,225,0.6)';
+        g.stroke();
       }
     }
   }
@@ -847,6 +893,25 @@ export class BoardView {
           a.alpha = t;
           b.alpha = t;
         });
+      } else if (e.t === 'lure') {
+        const m = pushes.find((q) => q.id === e.to);
+        const w = U(e.id);
+        const v = U(e.to);
+        this.sfx('lure');
+        this.trail(v.x, v.y, w.x, w.y);
+        this.burst(w.x + 0.5, w.y + 0.5, 8, '#bff4ff', 1.2, 500);
+        if (m) {
+          const steps = m.path.length - 1;
+          const [tx] = m.path[steps];
+          if (tx !== m.path[0][0]) v.flip = tx < m.path[0][0];
+          await this.tween(110 + steps * 120, (t) => {
+            const f = ease(t) * steps;
+            const k = Math.min(steps - 1, Math.floor(f));
+            const q = f - k;
+            v.x = lerp(m.path[k][0], m.path[k + 1][0], q);
+            v.y = lerp(m.path[k][1], m.path[k + 1][1], q);
+          });
+        }
       } else if (e.t === 'sink') {
         await this.sinkAnim(U(e.id), e.x, e.y);
         if (opts.onKill) opts.onKill(e);
@@ -928,14 +993,28 @@ export class BoardView {
     if (opts.afterAttacks) await opts.afterAttacks();
     const moves = [];
     const flees = [];
+    const arrivals = [];
     for (; i < ev.length; i++) {
       const e = ev[i];
       if (e.t === 'flee') flees.push(e);
+      else if (e.t === 'arrive') arrivals.push(e);
       else if (e.t === 'move' && !e.fast) moves.push(e);
     }
     if (flees.length) {
       await Promise.all(flees.map((e) => this.fleeAnim(U(e.id))));
       for (const e of flees) this.units.delete(e.id);
+    }
+    if (arrivals.length) {
+      this.state = { ...this.state, coming: null };
+      this.sfx('arrive');
+      const fades = arrivals.map((e) => {
+        const v = this.toView({ id: e.id, k: e.k, x: e.x, y: e.y, hp: KINDS[e.k].hp });
+        v.alpha = 0;
+        this.units.set(e.id, v);
+        this.burst(e.x + 0.5, e.y + 0.6, 12, '#ffc070', 1.2, 600);
+        return this.tween(320, (t) => (v.alpha = t));
+      });
+      await Promise.all(fades);
     }
     if (moves.length) {
       const segs = Math.max(...moves.map((m) => m.path.length - 1));
@@ -959,7 +1038,8 @@ export class BoardView {
     }
     this.sync(final);
     this.showIntents = true;
-    if (ev.some((e) => e.t === 'aim')) this.sfx('aim');
+    if (ev.some((e) => e.t === 'call')) this.sfx('call');
+    else if (ev.some((e) => e.t === 'aim')) this.sfx('aim');
     this.busy = false;
     this.kick();
   }

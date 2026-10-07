@@ -1,4 +1,4 @@
-import { actions, clone, step, preview, wisp, enemies } from './engine.js';
+import { actions, clone, step, preview, wisp, enemies, terr, BOG } from './engine.js';
 
 function quick(s) {
   let bestSafe = -Infinity;
@@ -27,6 +27,7 @@ export function botMove(s, ply = 2) {
     let near = 0;
     for (const e of enemies(c)) near += Math.max(0, 4 - Math.abs(e.x - p.x) - Math.abs(e.y - p.y));
     v -= near * 0.5;
+    if (terr(c, p.x, p.y) === BOG) v += 0.8;
     v += Math.random() * 0.01;
     if (!best || v > best.v) best = { a, v };
   }
